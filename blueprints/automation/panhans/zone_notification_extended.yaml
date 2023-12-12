@@ -23,7 +23,7 @@ blueprint:
     If you want to test this automation, you need to change the state of an observerd person. you can do this, in the developer options. Simply filter for your person entity, click on it and change the state to a zone used by this automation.
 
 
-    **Version**: 3.3
+    **Version**: 3.4
 
     **Help & FAQ**: [Zone Notification Extended](https://community.home-assistant.io/t/zone-notification-extended)
 
@@ -57,6 +57,13 @@ blueprint:
             domain: zone
           multiple: true
 
+    zone_regex:
+      name: Zone Keyword
+      description: "Instead of adding every zone you can use keywords: For adding all your stores just type in 'store' for example."
+      default: ''
+      selector:
+        text:
+
     zones_leaving:
       name: Leaving Zones
       description: "Define zones for leaving notifications only. Hint: If set the default Zones above only will be triggered arriving notifications / actions."
@@ -66,6 +73,13 @@ blueprint:
           filter:
             domain: zone
           multiple: true
+
+    zone_leaving_regex:
+      name: Zones Leaving Keyword
+      description: "Instead of adding every zone you can use keywords: For adding all your stores just type in 'store' for example."
+      default: ''
+      selector:
+        text:
 
     duration:
       name: Duration
@@ -204,6 +218,12 @@ variables:
   home_zone_name: "{{ 'home' | lower }}"
   home_zone: "{{ 'zone.home' | lower }}"
   not_home: "{{ 'not_home' | lower }}"
+
+  zone_regex: !input zone_regex
+  zone_leaving_regex: !input zone_leaving_regex
+  zones_regex: "{{ states['zone'] | selectattr('attributes.friendly_name','search','(?i)'+zone_regex) | map(attribute='attributes.friendly_name') | list }}"
+  zones_leaving_regex: "{{ states['zone'] | selectattr('attributes.friendly_name','search','(?i)'+zone_leaving_regex) | map(attribute='attributes.friendly_name') | list }}"
+
   zone_names: |
     {% set friendly = namespace(name=[]) %}
     {% for zone in zones %}
@@ -214,7 +234,7 @@ variables:
       {% set friendly.name = friendly.name + [new_zone.strip()] %}
     {% endfor %}
 
-    {{ friendly.name }}
+    {{ friendly.name + zones_regex }}
 
   zones_leaving: !input zones_leaving
   zones_leaving_names: |
@@ -227,7 +247,7 @@ variables:
       {% set friendly.name = friendly.name + [new_zone.strip()] %}
     {% endfor %}
 
-    {{ friendly.name }}
+    {{ friendly.name + zones_leaving_regex }}
 
   notify_device: !input notify_device
   notify_group: !input notify_group
