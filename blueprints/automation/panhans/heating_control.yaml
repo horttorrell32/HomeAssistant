@@ -45,7 +45,7 @@ blueprint:
 
 
 
-    **Version**: 4.3.14
+    **Version**: 4.3.15
 
     **Help & FAQ**: [Advanced Heating Control](https://community.home-assistant.io/t/advanced-heating-control/469873)
 
@@ -59,7 +59,7 @@ blueprint:
   domain: automation
   input:
     thermostat_section:
-      name: Thermostats
+      name: Thermostats & Sensors
       icon: mdi:thermostat
       input:
         input_trvs:
@@ -94,46 +94,37 @@ blueprint:
                 - auto
                 - heat_cool
 
-    temperature_section:
-      name: Temperatures
-      icon: mdi:thermometer
-      collapsed: true
-      input:
-        input_temperature_minimum_static:
-          name: 🌱 Static Eco Temperature
+        input_temperature_sensor:
+          name: 🌡️ Room Temperature Sensor
           description: >
-            `eco temperature`
+            `calibration` `aggressive mode` `optional`
 
 
-            The temperature that is set when your heating schedule is not active.
-          default: 19
-          selector:
-            number:
-              min: 4.0
-              max: 75.0
-              step: 0.5
-              mode: box
-              unit_of_measurement: °C / °F
+            For some features an external temperature sensor is reqired, e.g. calibration.
 
-        input_temperature_minimum:
-          name: 🌱 Eco Temperature
-          description: >
-            `eco temperature` `optional`
+            Temperature calibration for your [thermostats](https://www.home-assistant.io/integrations/climate/). The following is supported:
 
+              * Tado, Aqara, Popp, Danfoss, Hive, Tuya
+              * generic calibration
 
-            To control your eco temperature via automations or the UI, you can specify an *[input_number](https://www.home-assistant.io/integrations/input_number/)* entity here.
-
-
-            Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
+            Note: This is an additional sensor inside your room usually next to your favourite spot. [Thermostats](https://www.home-assistant.io/integrations/climate/) or its integration (e.g. Z2M or ZHA) except Tado should provide a seperate calibration entity.
           default:
           selector:
             entity:
               filter:
                 - domain:
-                    - input_number
+                    - sensor
+                  device_class:
+                    - temperature
               multiple: false
+                
 
-        # C O M F O R T   &   M O D S
+    temperature_section:
+      name: Temperatures
+      icon: mdi:thermometer
+      collapsed: true
+      input:
+
         input_temperature_comfort_static:
           name: 🛋️ Static Comfort Temperature
           description: >
@@ -146,6 +137,22 @@ blueprint:
             number:
               min: 12.0
               max: 86.0
+              step: 0.5
+              mode: box
+              unit_of_measurement: °C / °F
+
+        input_temperature_minimum_static:
+          name: 🌱 Static Eco Temperature
+          description: >
+            `eco temperature`
+
+
+            The temperature that is set when your heating schedule is not active.
+          default: 19
+          selector:
+            number:
+              min: 4.0
+              max: 75.0
               step: 0.5
               mode: box
               unit_of_measurement: °C / °F
@@ -168,128 +175,38 @@ blueprint:
                     - input_number
               multiple: false
 
-    # P E R S O N S
-    person_section:
-      name: People
-      icon: mdi:account-multiple
-      collapsed: true
-      input:
-        input_persons:
-          name: 👥 People
+        input_temperature_minimum:
+          name: 🌱 Eco Temperature
           description: >
-            `people` `optional`
+            `eco temperature` `optional`
 
 
-            You can specify [people](https://www.home-assistant.io/integrations/person/) to make your heating plan more dynamic. If you do not use [schedulers](https://www.home-assistant.io/integrations/schedule/) or presence sensors, heating is activated as soon as someone is at home.<br/>
-            With [schedulers](https://www.home-assistant.io/integrations/schedule/) or presence sensors, these are only active when someone is at home.
-          default: []
-          selector:
-            entity:
-              filter:
-                - domain:
-                    - person
-              multiple: true
-
-        input_people_entering_home_duration:
-          name: 🏠 Enter Home Duration
-          description: >
-            `people`
-
-
-            Duration for which someone must be at home for heating to be activated.
-          default:
-            hours: 0
-            minutes: 0
-            seconds: 2
-          selector:
-            duration:
-
-        input_people_leaving_home_duration:
-          name: 💨 Leaving Home Duration
-          description: >
-            `people`
-
-
-            Duration for which someone must be out of the house for heating to be deactivated.
-          default:
-            hours: 0
-            minutes: 0
-            seconds: 2
-          selector:
-            duration:
-
-    # S C H E D U L E R
-    scheduling_section:
-      name: Scheduling
-      icon: mdi:clock-outline
-      collapsed: true
-      input:
-        input_schedulers:
-          name: ⏲️ Scheduler
-          description: >
-            `scheduler` `optional`
-
-
-            A [scheduler](https://www.home-assistant.io/integrations/schedule/) specifies when heating to comfort temperature should take place. You can create it in the helper section of Home Assistant.<br/>
-            If you have also specified [people](https://www.home-assistant.io/integrations/person/), someone must also be at home for heating.<br/>
-            You can create as many [schedulers](https://www.home-assistant.io/integrations/schedule/) as you like. Make sure the names are clear.
-
-
-            Create your scheduler [here](https://my.home-assistant.io/redirect/helpers/).
-          default: []
-          selector:
-            entity:
-              filter:
-                - domain:
-                    - schedule
-              multiple: true
-
-        input_scheduler_selector:
-          name: ☝🏻 Scheduler Selector
-          description: >
-            `scheduler` `optional`
-
-
-            Define an entity to choose from your schedulers. If you use one scheduler only you can ignore this. If you use more than one scheduler you have multiple possibilities to setup your selection.<br/>
-
-            <details>
-            <summary><code><strong>CLICK HERE:</strong> More information</code></summary>
-            <br/>
-
-
-
-            * toggle [input_boolean](https://www.home-assistant.io/integrations/input_boolean/) or [binary_sensor](https://www.home-assistant.io/integrations/binary_sensor/): If *off* the first defined [scheduler](https://www.home-assistant.io/integrations/schedule/) is active. If *on* the second [scheduler](https://www.home-assistant.io/integrations/schedule/) is active. More than two [schedulers](https://www.home-assistant.io/integrations/schedule/) cannot be selected with binary inputs.
-
-            * text [input text](https://www.home-assistant.io/integrations/input_text/), drop down [input text](https://www.home-assistant.io/integrations/input_select/) or [sensor](https://www.home-assistant.io/integrations/sensor/):
-              * The value has to match the friendly name of the selected [scheduler](https://www.home-assistant.io/integrations/schedule/) at least partially. Example: If you provide three [schedulers](https://www.home-assistant.io/integrations/schedule/) called *work*, *holiday/sick*, *guest* you can select the holiday [scheduler](https://www.home-assistant.io/integrations/schedule/) while setting the selection entity to *sick*, *holiday* or *holiday/sick*. This option is case insensitive.
-              * You also can go with numbers: if you want to choose the first [scheduler](https://www.home-assistant.io/integrations/schedule/) the selector entity must return the number *1*. For the 2nd number *2* and so on.
+            To control your eco temperature via automations or the UI, you can specify an *[input_number](https://www.home-assistant.io/integrations/input_number/)* entity here.
 
 
             Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
-
-
-
-            </details>
-
           default:
           selector:
             entity:
               filter:
                 - domain:
-                    - input_boolean
-                    - binary_sensor
-                    - input_text
                     - input_number
-                    - input_select
               multiple: false
 
+    adjustment_section:
+      name: Adjustments / Heating Plan
+      icon: mdi:sun-clock
+      collapsed: true
+      input:
+        
         input_time_based_temperature_change_valve_target:
           name: 🎛️ Heating Schedule Adjustments
           description: >
             `optional`
 
 
-            Here you can setup some adjustments to your heating schedule.
+            Here you can setup some adjustments to your heating schedule.<br/><br/>
+            *Note*: Here you can set values for eco or comfort temperature. The switch between those target temperatures is controled by schedules, presence sensors, proximite, ect.
             <br/>
 
             <details>
@@ -360,6 +277,264 @@ blueprint:
           selector:
             object:
           default: "[]"
+
+    # M O D E S
+    mode_section:
+      name: Force Comfort Mode
+      icon: mdi:fire
+      collapsed: true
+      input:
+        input_mode_party:
+          name: 🎈 Party mode
+          description: >
+            `optional`
+
+
+            If on, all settings are ignored and heating takes place. You can define multiple [timers](https://www.home-assistant.io/integrations/timer/) or boolean entities.
+            If you put a number at the end of the friendly name like *Party Timer 20* this number will be taken as the desired comfort temperature for this [timer](https://www.home-assistant.io/integrations/timer/).
+
+
+            Create your timer [here](https://my.home-assistant.io/redirect/helpers/).
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - input_boolean
+                    - binary_sensor
+                    - timer
+              multiple: true
+
+        input_force_max_temperature:
+          name: 🥵 Force Max Temperature
+          description: >
+            `optional`
+
+
+            Set the maximum temperature of all [thermostats](https://www.home-assistant.io/integrations/climate/) regardless of any other settings.
+
+
+            **HINT:** Implemented by developer for maintenance reasons. Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
+          default:
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - input_boolean
+              multiple: false
+
+    temperature_tweak_section:
+      name: Temperature Tweaks
+      icon: mdi:knob
+      collapsed: true
+      input:
+        input_off_instead_of_eco:
+          name: 🛑 Off Instead Of Eco
+          description: >
+            `optional` `temperature tweak`
+
+
+            Turn off your [thermostats](https://www.home-assistant.io/integrations/climate/) instead of lower the target temperature to eco temperature.
+          default: false
+          selector:
+            boolean:
+
+
+        input_min_instead_of_off:
+          name: ⬇️ Min Instead Of Off
+          description: >
+            `optional` `temperature tweak`
+
+
+            Lower the temperature instead of turning them *OFF*, e.g. during airing.
+          default: false
+          selector:
+            boolean:
+
+
+        input_fahrenheit:
+          name: 🇫 Fahrenheit
+          description: >
+            `optional` `temperature tweak`
+
+
+            Enable this if your unit of measurement is Fahrenheit (untested).
+          default: false
+          selector:
+            boolean:
+
+        input_reset_temperature:
+          name: ↩️ Reset Temperature
+          description: >
+            `optional` `temperature tweak`
+
+
+            Reset your temperature entities to the values of the static temperatures after [schedule](https://www.home-assistant.io/integrations/schedule/) or [presence](https://www.home-assistant.io/integrations/schedule) ends.
+          default: false
+          selector:
+            boolean:
+
+        input_off_if_above_room_temperature:
+          name: ↕️ Off If Above/Below Room Temperature
+          description: >
+
+            Turns your [climate](https://www.home-assistant.io/integrations/climate/) entity *off* if the target temperature is below(cooling) / above(heating) the room temperature.
+
+          default: false
+          selector:
+            boolean:
+
+        input_physical_change:
+          name: 🧪 Physical Temperature Change / Sync (experimental)
+          description: >
+            `optional` `temperature tweak`
+
+
+            Enable this if your want to adjust the temperature using your thermostat or thermostat card. Make sure aggressive mode and generic calibration is disabled for this feature. (experimental).
+            You also need to set entities for eco and comfort temperature for the moment. 
+          default: false
+          selector:
+            boolean:
+
+    # P E R S O N S
+    person_section:
+      name: People
+      icon: mdi:account-multiple
+      collapsed: true
+      input:
+        input_persons:
+          name: 👥 People
+          description: >
+            `people` `optional`
+
+
+            You can specify [people](https://www.home-assistant.io/integrations/person/) to make your heating plan more dynamic. If you do not use [schedulers](https://www.home-assistant.io/integrations/schedule/) or presence sensors, heating is activated as soon as someone is at home.<br/>
+            With [schedulers](https://www.home-assistant.io/integrations/schedule/) or presence sensors, these are only active when someone is at home.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - person
+              multiple: true
+
+        input_people_entering_home_duration:
+          name: 🏠 Enter Home Duration
+          description: >
+            `people`
+
+
+            Duration for which someone must be at home for heating to be activated.
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 2
+          selector:
+            duration:
+
+        input_people_leaving_home_duration:
+          name: 💨 Leaving Home Duration
+          description: >
+            `people`
+
+
+            Duration for which someone must be out of the house for heating to be deactivated.
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 2
+          selector:
+            duration:
+
+        input_mode_guest:
+          name: 🤝 Guest mode
+          description: >
+            `optional`
+
+
+
+            If an entity is specified here, it is treated like a [person](https://www.home-assistant.io/integrations/person/). It's usefull when you're leaving your guests alone in your home and you are not using presence detection.
+
+              * entity defined -> [person](https://www.home-assistant.io/integrations/person/) defined
+              * enitity is *on* -> simulates [person](https://www.home-assistant.io/integrations/person/) is home
+              * enitity is *off* -> simulates [person](https://www.home-assistant.io/integrations/person/) is away
+
+
+            Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
+          default:
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - input_boolean
+                    - binary_sensor
+                    - timer
+              multiple: false
+
+    # S C H E D U L E R
+    scheduling_section:
+      name: Scheduling
+      icon: mdi:clock-outline
+      collapsed: true
+      input:
+        input_schedulers:
+          name: ⏲️ Scheduler
+          description: >
+            `scheduler` `optional`
+
+
+            A [scheduler](https://www.home-assistant.io/integrations/schedule/) specifies when heating to comfort temperature should take place. You can create it in the helper section of Home Assistant.<br/>
+            If you have also specified [people](https://www.home-assistant.io/integrations/person/), someone must also be at home for heating.<br/>
+            You can create as many [schedulers](https://www.home-assistant.io/integrations/schedule/) as you like. Make sure the names are clear.
+
+
+            Create your scheduler [here](https://my.home-assistant.io/redirect/helpers/).
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - schedule
+              multiple: true
+
+        input_scheduler_selector:
+          name: ☝🏻 Scheduler Selector
+          description: >
+            `scheduler` `optional`
+
+
+            Define an entity to choose from your schedulers. If you use one scheduler only you can ignore this. If you use more than one scheduler you have multiple possibilities to setup your selection.<br/>
+
+            <details>
+            <summary><code><strong>CLICK HERE:</strong> More information</code></summary>
+            <br/>
+
+
+
+            * toggle [input_boolean](https://www.home-assistant.io/integrations/input_boolean/) or [binary_sensor](https://www.home-assistant.io/integrations/binary_sensor/): If *off* the first defined [scheduler](https://www.home-assistant.io/integrations/schedule/) is active. If *on* the second [scheduler](https://www.home-assistant.io/integrations/schedule/) is active. More than two [schedulers](https://www.home-assistant.io/integrations/schedule/) cannot be selected with binary inputs.
+
+            * text [input text](https://www.home-assistant.io/integrations/input_text/), drop down [input text](https://www.home-assistant.io/integrations/input_select/) or [sensor](https://www.home-assistant.io/integrations/sensor/):
+              * The value has to match the friendly name of the selected [scheduler](https://www.home-assistant.io/integrations/schedule/) at least partially. Example: If you provide three [schedulers](https://www.home-assistant.io/integrations/schedule/) called *work*, *holiday/sick*, *guest* you can select the holiday [scheduler](https://www.home-assistant.io/integrations/schedule/) while setting the selection entity to *sick*, *holiday* or *holiday/sick*. This option is case insensitive.
+              * You also can go with numbers: if you want to choose the first [scheduler](https://www.home-assistant.io/integrations/schedule/) the selector entity must return the number *1*. For the 2nd number *2* and so on.
+
+
+            Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
+
+
+
+            </details>
+
+          default:
+          selector:
+            entity:
+              filter:
+                - domain:
+                    - input_boolean
+                    - binary_sensor
+                    - input_text
+                    - input_number
+                    - input_select
+              multiple: false
 
     # P R E S E N C E
     presence_section:
@@ -590,7 +765,11 @@ blueprint:
 
         input_window_open_temperature:
           name: Window Open Temperature
-          description: ''
+          description: >
+            `airing` 
+
+
+            If 0° your thermostat turns *off* or if not supported it turns to the minimum temperature of your thermostat.
           default: 0
           selector:
             number:
@@ -599,34 +778,25 @@ blueprint:
               step: 1
               mode: slider
               unit_of_measurement: °C / °F
+            
+        input_window_legacy_restore:
+          name: 🏚️ Legacy Restore
+          description: >
+            `airing` 
 
+
+            Enable this if the temperatures after airing (closing windows) or party won't restore properly
+          default: false
+          selector:
+            boolean:
+    
     # C A L I B R A T I O N
     calibration_section:
       name: Calibration
       icon: mdi:compass
+      description: ""
       collapsed: true
       input:
-        input_temperature_sensor:
-          name: 🌡️ Calibration Temperature Sensor
-          description: >
-            `calibration` `optional`
-
-
-            Temperature calibration for your [thermostats](https://www.home-assistant.io/integrations/climate/). The following is supported:
-
-              * Tado, Aqara, Popp, Danfoss, Hive, Tuya
-              * generic calibration
-
-            Note: This is an additional sensor inside your room usually next to your favourite spot. [Thermostats](https://www.home-assistant.io/integrations/climate/) or its integration (e.g. Z2M or ZHA) except Tado should provide a seperate calibration entity.
-          default:
-          selector:
-            entity:
-              filter:
-                - domain:
-                    - sensor
-                  device_class:
-                    - temperature
-              multiple: false
 
         input_calibration_timeout:
           name: ⏳ Calibration Timeout
@@ -696,7 +866,7 @@ blueprint:
       collapsed: true
       input:
         input_aggressive_mode_range:
-          name: 😡 Aggressive Mode - Range
+          name: 😡 Aggressive Range
           description: >
             `aggressive mode` `tweak`
 
@@ -724,7 +894,7 @@ blueprint:
               unit_of_measurement: °C / °F
 
         input_aggressive_mode_offset:
-          name: 😡 Aggressive Mode - Offset
+          name: ↕ Aggressive Offset
           description: >
             `aggressive mode` `tweak`
 
@@ -739,6 +909,19 @@ blueprint:
               step: 0.5
               mode: slider
               unit_of_measurement: °C / °F
+
+        input_aggressive_mode_calibration:
+          name: 🌡️ Aggressive Calibration
+          description: >
+            `aggressive mode` `tweak` `experimental` 
+
+            If you'd setup an temperature sensor and your thermostats allow calibration, you can enable this feature. If enabled the aggressive offset will be add to the calibration value and not the target temperature.
+            
+            *Note*: This feature is marked as experimental since not every calibration method could be tested. If you notice any problems simple open an issue or post a message in the [AHC-Thread](https://community.home-assistant.io/t/advanced-heating-control). 
+          default: false
+          selector:
+            boolean:
+
 
     # F R O S T   P R O T E C T I O N
     frostprotection_section:
@@ -836,76 +1019,6 @@ blueprint:
           selector:
             time:
 
-    # M O D E S
-    mode_section:
-      name: Modes
-      icon: mdi:knob
-      collapsed: true
-      input:
-        input_mode_party:
-          name: 🎈 Party mode
-          description: >
-            `optional`
-
-
-            If on, all settings are ignored and heating takes place. You can define multiple [timers](https://www.home-assistant.io/integrations/timer/) or boolean entities.
-            If you put a number at the end of the friendly name like *Party Timer 20* this number will be taken as the desired comfort temperature for this [timer](https://www.home-assistant.io/integrations/timer/).
-
-
-            Create your timer [here](https://my.home-assistant.io/redirect/helpers/).
-          default: []
-          selector:
-            entity:
-              filter:
-                - domain:
-                    - input_boolean
-                    - binary_sensor
-                    - timer
-              multiple: true
-
-        input_mode_guest:
-          name: 🤝 Guest mode
-          description: >
-            `optional`
-
-
-
-            If an entity is specified here, it is treated like a [person](https://www.home-assistant.io/integrations/person/). It's usefull when you're leaving your guests alone in your home and you are not using presence detection.
-
-              * entity defined -> [person](https://www.home-assistant.io/integrations/person/) defined
-              * enitity is *on* -> simulates [person](https://www.home-assistant.io/integrations/person/) is home
-              * enitity is *off* -> simulates [person](https://www.home-assistant.io/integrations/person/) is away
-
-
-            Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
-          default:
-          selector:
-            entity:
-              filter:
-                - domain:
-                    - input_boolean
-                    - binary_sensor
-                    - timer
-              multiple: false
-
-        input_force_max_temperature:
-          name: 🥵 Force Max Temperature
-          description: >
-            `optional`
-
-
-            Set the maximum temperature of all [thermostats](https://www.home-assistant.io/integrations/climate/) regardless of any other settings.
-
-
-            **HINT:** Implemented by developer for maintenance reasons. Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
-          default:
-          selector:
-            entity:
-              filter:
-                - domain:
-                    - input_boolean
-              multiple: false
-
     # W I N T E R  M O D E
     toggle_section:
       name: "On/Off Automation Options"
@@ -990,22 +1103,20 @@ blueprint:
               unit_of_measurement: °C / °F
 
         input_mode_room_temperature:
-          name: 🔘 Room Temperature Sensor
+          name: 🔘 Enable Room Temperature Threshold
           description: >
             `activation` `optional`
 
 
-            If you add an additional room sensor both values (outside and room temperature) must be below / above
+            If you enable this option the value of the defined room temperature sensor and the value of the outside temperautre must be below / above
             its threshold. That makes sense if you go with an A/C and the room is still heated up but it has already cooled down outside.
 
-          default:
+
+            **Not recommendend for heating**
+
+          default: false
           selector:
-            entity:
-              filter:
-                - domain:
-                    - sensor
-                  device_class: temperature
-              multiple: false
+            boolean:
 
         input_mode_room_temperature_threshold:
           name: 🎚️ Room Temperature Threshold
@@ -1025,7 +1136,7 @@ blueprint:
 
     # TWEAKS
     tweak_section:
-      name: Tweaks
+      name: Custom Settings
       icon: mdi:cog-box
       collapsed: true
       input:
@@ -1043,64 +1154,6 @@ blueprint:
             seconds: 2
           selector:
             duration:
-
-        input_tweaks:
-          name: ⚙️ Tweaks
-          description: "
-            `tweak`
-
-
-            > ### ↩️ Reset Temperature
-
-            > Reset your temperature entities to the values of the static temperatures after [schedule](https://www.home-assistant.io/integrations/schedule/) or [presence](https://www.home-assistant.io/integrations/schedule) ends
-
-            > ### 🛑 Turn *OFF* Instead Of Eco Temperature
-
-            > Turn off your [thermostats](https://www.home-assistant.io/integrations/climate/) instead of lower the temperature to eco temperature
-
-            > ### ⬇️ Min Temperature Instead Of *OFF*
-
-            > Lower the temperature instead of turning them *OFF*, e.g. during airing
-
-            > ### ↕️ Off If Above/Below Room Temperature
-
-            > Turns your [climate](https://www.home-assistant.io/integrations/climate/) entity *off* if the target temperature is below(cooling) / above(heating) the room temperature
-
-            > ### 🇫 Fahrenheit
-
-            > Enable this if your unit of measurement is Fahrenheit (untested)
-
-            > ### 🪟 Legacy Restore
-
-            > Enable this if the temperatures after airing (closing windows) or party won't restore properly
-
-            > ### 🧪 Physical Temperature Change / Sync
-
-            > Enable this if your want to adjust the temperature using your thermostat or thermostat card. Make sure aggressive mode and generic calibration is disabled for this feature. (experimental)
-
-            "
-
-          default: []
-          selector:
-            select:
-              options:
-                - label: "↩️ Reset Temperature"
-                  value: reset_temperature
-                - label: "🛑 Off Instead Of Eco"
-                  value: off_instead_min
-                - label: "⬇️ Min Instead Of Off"
-                  value: not_off_but_min
-                - label: "↕️ Off If Above/Below Room Temperature"
-                  value: heat_only_if_below_real_temp
-                - label: "🇫 Fahrenheit"
-                  value: fahrenheit
-                - label: "🪟 Legacy Restore"
-                  value: legacy_restore
-                - label: "🧪 Physical Temperature Change / Sync (experimental)"
-                  value: physical_temperature_change
-              multiple: true
-              custom_value: false
-              mode: list
 
         # C U S T O M   A C T I O N
         input_custom_action:
@@ -1139,36 +1192,6 @@ blueprint:
                 - error
                 - debug
 
-    # E X P E R I M E N T A L
-    # input_tweaks_experimental:
-    #   name: 🧪 Experimental Tweaks
-    #   description: "
-    #     `tweak`
-
-    #     > ### 🌡️ Physical Temperature Change
-
-    #     > Adjust the temperature via your thermostats.
-
-    #     > ### 🎈 Start Party Timer On Physical Change
-
-    #     > Start your party timer when you change the temperature via your thermostats.
-
-    #     **HINT**: This features may won't work properly since there is a [bug](https://github.com/home-assistant/core/issues/99914) in home assistant.
-
-    #     "
-
-    #   default: []
-    #   selector:
-    #     select:
-    #       options:
-    #         - label: "🌡️ Physical Temperature Change"
-    #           value: physical_temperature_change
-    #         - label: "🎈 Start Party Timer On Physical Change"
-    #           value: physical_party_timer
-    #       multiple: true
-    #       custom_value: false
-    #       mode: list
-
 ##################################################
 ############### T R I G G E R ####################
 ##################################################
@@ -1205,13 +1228,12 @@ trigger_variables:
   # MODE ON / OFF
   input_mode_outside_temperature: !input input_mode_outside_temperature
   input_mode_outside_temperature_threshold: !input input_mode_outside_temperature_threshold
-  input_mode_room_temperature: !input input_mode_room_temperature
+  is_mode_room_temperature: !input input_mode_room_temperature
   input_mode_room_temperature_threshold: !input input_mode_room_temperature_threshold
 
   input_frost_protection_duration: !input input_frost_protection_duration
 
-  input_tweaks: !input input_tweaks
-  is_heat_only_if_below_real_temp: "{{ 'heat_only_if_below_real_temp' in input_tweaks}}"
+  is_heat_only_if_below_real_temp: !input input_off_if_above_room_temperature
 
   factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
 
@@ -1464,17 +1486,17 @@ trigger:
         {% endif %}
       {% endif %}
 
-      {% set room_state = iif(input_mode_room_temperature != none,false,true) %}
+      {% set room_state = iif(is_mode_room_temperature and input_temperature_sensor != none,false,true) %}
 
-      {% if input_mode_room_temperature != none %}
-        {% set state = states(input_mode_room_temperature) %}
+      {% if input_temperature_sensor != none and is_mode_room_temperature %}
+        {% set state = states(input_temperature_sensor) %}
 
         {% if is_number(state) %}
           {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
         {% endif %}
       {% endif %}
 
-      {{ input_mode_room_temperature != none and room_state and outside_state }}
+      {{ (input_temperature_sensor != none and is_mode_room_temperature) and room_state and outside_state }}
     for:
       seconds: 2
 
@@ -1492,17 +1514,17 @@ trigger:
         {% endif %}
       {% endif %}
 
-      {% set room_state = iif(input_mode_room_temperature != none,false,true) %}
+      {% set room_state = iif(is_mode_room_temperature and input_temperature_sensor != none,false,true) %}
 
-      {% if input_mode_room_temperature != none %}
-        {% set state = states(input_mode_room_temperature) %}
+      {% if input_temperature_sensor != none and is_mode_room_temperature %}
+        {% set state = states(input_temperature_sensor) %}
 
         {% if is_number(state) %}
           {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
         {% endif %}
       {% endif %}
 
-      {{ input_mode_room_temperature != none and (not room_state or not outside_state) }}
+      {{ (input_temperature_sensor != none and is_mode_room_temperature) and (not room_state or not outside_state) }}
     for:
       seconds: 2
 
@@ -1714,24 +1736,30 @@ variables:
   input_calibration_delta: !input input_calibration_delta
   input_time_based_temperature_change_valve_target: !input input_time_based_temperature_change_valve_target
   input_action_call_delay: !input input_action_call_delay
+
+  # Aggressive Mode
   input_aggressive_mode_offset: !input input_aggressive_mode_offset
   input_aggressive_mode_range: !input input_aggressive_mode_range
+  input_aggressive_mode_calibration: !input input_aggressive_mode_calibration
+
   input_custom_action: !input input_custom_action
-  input_tweaks: !input input_tweaks
+
   input_calibration_options: !input input_calibration_options
   input_hvac_mode: !input input_hvac_mode
   input_away_offset: !input input_away_offset
   input_away_options: !input input_away_options
-  #input_tweaks_experimental: !input input_tweaks_experimental
 
   # TWEAKS
-  is_reset_temperature: "{{ 'reset_temperature' in input_tweaks}}"
-  is_off_instead_min: "{{ 'off_instead_min' in input_tweaks}}"
-  is_not_off_but_min: "{{ 'not_off_but_min' in input_tweaks}}"
-  is_heat_only_if_below_real_temp: "{{ 'heat_only_if_below_real_temp' in input_tweaks}}"
-  is_fahrenheit: "{{ 'fahrenheit' in input_tweaks}}"
-  is_legacy_restore: "{{ 'legacy_restore' in input_tweaks}}"
+  is_reset_temperature: !input input_reset_temperature
+  is_off_instead_min: !input input_off_instead_of_eco
+  is_not_off_but_min: !input input_min_instead_of_off
+  is_fahrenheit: !input input_fahrenheit
+  is_heat_only_if_below_real_temp: !input input_off_if_above_room_temperature
+
+  is_legacy_restore: !input input_window_legacy_restore
+
   is_aggressive_mode: "{{ input_aggressive_mode_offset > 0 }}"
+  is_aggressive_mode_calibration: "{{ input_aggressive_mode_calibration and input_temperature_sensor != none }}"
 
   is_generic_calibration: "{{ 'generic_calibration' in input_calibration_options}}"
   is_rounded_values: "{{ 'rounded_values' in input_calibration_options}}"
@@ -1740,8 +1768,7 @@ variables:
   is_presence_away_mode: "{{ 'presence' in input_away_options}}"
   presence_ignor_people: "{{ 'presence_ignor_people' in input_away_options}}"
 
-  is_physical_change_enabled: "{{ 'physical_temperature_change' in input_tweaks }}"
-  # is_physical_party_timer: "{{ 'physical_party_timer' in input_tweaks_experimental}}"
+  is_physical_change_enabled: !input input_physical_change
 
   # V A L V E   G R O U P S
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
@@ -1787,7 +1814,7 @@ variables:
       {{ true }}
     {% else %}
       {% set outside_state = iif(input_mode_outside_temperature == none, true, false) %}
-      {% set room_state = iif(input_mode_room_temperature == none, true, false) %}
+      {% set room_state = iif(not is_mode_room_temperature or input_temperature_sensor == none, true, false) %}
 
       {% if input_mode_outside_temperature != none %}
         {% set state = states(input_mode_outside_temperature) %}
@@ -1798,8 +1825,8 @@ variables:
         {% endif %}
       {% endif %}
 
-      {% if input_mode_room_temperature != none %}
-        {% set state = states(input_mode_room_temperature) %}
+      {% if input_temperature_sensor != none and is_mode_room_temperature %}
+        {% set state = states(input_temperature_sensor) %}
 
         {% if is_number(state) %}
           {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
@@ -1808,7 +1835,7 @@ variables:
 
       {% set any_input_none = input_mode_outside_temperature == none or input_mode_room_temperature == none %}
 
-      {{ input_mode_outside_temperature != none and room_state and outside_state }}
+      {{ (input_temperature_sensor != none and is_mode_room_temperature) and room_state and outside_state }}
     {% endif %}
 
   is_liming_protetion: >
@@ -2363,7 +2390,7 @@ variables:
     {{
       trigger.platform != none and
       mode != 'off' and
-      'calibration' in trigger.id and
+      ('calibration' in trigger.id or ('temperature_change' in trigger.id and is_aggressive_mode_calibration)) and
       input_temperature_sensor != none and
       is_number(states(input_temperature_sensor))
     }}
@@ -2413,7 +2440,7 @@ variables:
 
         {% if mode != 'off' %}
 
-          {% if is_aggressive_mode %}
+          {% if is_aggressive_mode and not is_aggressive_mode_calibration %}
 
             {% if is_generic_calibration and input_temperature_sensor != none %}
               {% set current_valve_temp = states(input_temperature_sensor) | float %}
@@ -2503,6 +2530,16 @@ variables:
         {% set offset = float(calibration_sensor_temperature) - float(local_temperature) %}
         {% set offset_new = (float(offset) + float(offset_old)) | round(rounding | int) %}
 
+        {% if is_aggressive_mode_calibration %}           
+          {% set temp_diff = state_attr(valve,'temperature') | float(temperature) - calibration_sensor_temperature %}
+
+          {% if temp_diff * factor < input_aggressive_mode_range * -1 %}
+            {% set offset_new = offset_new + input_aggressive_mode_offset * factor %}
+          {% elif temp_diff * factor > input_aggressive_mode_range %}
+            {% set offset_new = offset_new - input_aggressive_mode_offset * factor %}
+          {% endif %}
+        {% endif %}
+
         {% if (float(offset_old) - float(offset_new)) | abs >= float(input_calibration_delta) %}
           {% set n.dict = n.dict + [(valve, [{'value': offset_new}])] %}
         {% endif %}
@@ -2532,6 +2569,21 @@ variables:
           {% set calibration_entity = calibration_entities | first %}
           {% set offset_old = states(calibration_entity) | float(0) %}
           {% set offset_new = states(input_temperature_sensor) | float %}
+
+          {% if is_aggressive_mode_calibration %}           
+            {% set temp_diff = state_attr(valve,'temperature') | float(temperature) - calibration_sensor_temperature %}
+
+            {% if temp_diff * factor < input_aggressive_mode_range * -1 %}
+              {% set offset_new = offset_new + input_aggressive_mode_offset * factor %}
+            {% elif temp_diff * factor > input_aggressive_mode_range %}
+              {% set offset_new = offset_new - input_aggressive_mode_offset * factor %}
+            {% endif %}
+          {% endif %}
+
+          {% set min_calibration_value = state_attr(calibration_entity,'min') | float %}
+          {% set max_calibration_value = state_attr(calibration_entity,'max') | float %}
+          {% set offset_new = iif(offset_new > max_calibration_value, max_calibration_value, offset_new) %}
+          {% set offset_new = iif(offset_new < min_calibration_value, min_calibration_value, offset_new) %}
 
           {% if (float(offset_old) - float(offset_new)) | abs >= float(input_calibration_delta) %}
             {% set n.dict = n.dict + [(calibration_entity, [{'value': offset_new, 'valve': valve}])] %}
@@ -2567,8 +2619,25 @@ variables:
                                     map(attribute='entity_id') | first %}
 
         {% set calibration_sensor_temperature = states(input_temperature_sensor) | float %}
-        {% set new_state = (calibration_sensor_temperature | float(0) * 100) | int %}
+
         {% set old_state = states(calibration_entity) | int %}
+
+        {% if is_aggressive_mode_calibration %}           
+          {% set temp_diff = state_attr(valve,'temperature') | float(temperature) - calibration_sensor_temperature %}
+
+          {% if temp_diff * factor < input_aggressive_mode_range * -1 %}
+            {% set calibration_sensor_temperature = calibration_sensor_temperature + input_aggressive_mode_offset * factor %}
+          {% elif temp_diff * factor > input_aggressive_mode_range %}
+            {% set calibration_sensor_temperature = calibration_sensor_temperature - input_aggressive_mode_offset * factor %}
+          {% endif %}
+        {% endif %}
+
+        {% set new_state = (calibration_sensor_temperature | float(0) * 100) | int %}
+
+        {% set min_calibration_value = state_attr(calibration_entity,'min') | float %}
+        {% set max_calibration_value = state_attr(calibration_entity,'max') | float %}
+        {% set new_state = iif(new_state > max_calibration_value, max_calibration_value, new_state) %}
+        {% set new_state = iif(new_state < min_calibration_value, min_calibration_value, new_state) %}
 
         {% set update_calibration = false %}
 
@@ -2615,20 +2684,29 @@ variables:
 
           {% set calibration_entity = calibration_entities | first %}
           {% set step = state_attr(calibration_entity, 'step') | float %}
-          {% set min_calibration_value = state_attr(calibration_entity,'min') | float %}
-          {% set max_calibration_value = state_attr(calibration_entity,'max') | float %}
+          
           {% set thermostat_temperature = state_attr(valve, 'current_temperature') | float %}
           {% set calibration_sensor_temperature = states(input_temperature_sensor) | float %}
           {% set offset_old = states(calibration_entity) | float(0) %}
-
           {% set new_calibration_value = calibration_sensor_temperature - (thermostat_temperature - offset_old) %}
 
-          {% set new_calibration_value = iif(new_calibration_value > max_calibration_value, max_calibration_value, new_calibration_value) %}
-          {% set new_calibration_value = iif(new_calibration_value < min_calibration_value, min_calibration_value, new_calibration_value) %}
+          {% if is_aggressive_mode_calibration %}           
+            {% set temp_diff = state_attr(valve,'temperature') | float(temperature) - calibration_sensor_temperature %}
+
+            {% if temp_diff * factor < input_aggressive_mode_range * -1 %}
+              {% set new_calibration_value = new_calibration_value + input_aggressive_mode_offset * factor %}
+            {% elif temp_diff * factor > input_aggressive_mode_range %}
+              {% set new_calibration_value = new_calibration_value - input_aggressive_mode_offset * factor %}
+            {% endif %}
+          {% endif %}
 
           {% set round_size = iif('.' in (step | string) and is_rounded_values == false, (step | string).split('.')[1] | length, 0) %}
-
           {% set offset_new = ((new_calibration_value | float(0) / step) | round(0) * step) | round(round_size) | float %}
+
+          {% set min_calibration_value = state_attr(calibration_entity,'min') | float %}
+          {% set max_calibration_value = state_attr(calibration_entity,'max') | float %}
+          {% set offset_new = iif(offset_new > max_calibration_value, max_calibration_value, offset_new) %}
+          {% set offset_new = iif(offset_new < min_calibration_value, min_calibration_value, offset_new) %}
 
           {% if (float(offset_old) - float(offset_new)) | abs >= float(input_calibration_delta) %}
             {% set n.dict = n.dict + [(calibration_entity, [{'value': offset_new, 'valve': valve}])] %}
@@ -2713,7 +2791,7 @@ variables:
 
   is_physical_change: >
     {{ 
-      (is_physical_change_enabled and is_temp_change_by_thermostat and temperature != state_attr(trigger.to_state.entity_id,'temperature') and not (is_aggressive_mode or is_generic_calibration))
+      (is_physical_change_enabled and is_temp_change_by_thermostat and temperature != state_attr(trigger.to_state.entity_id,'temperature') and not ((is_aggressive_mode and not is_aggressive_mode_calibration) or is_generic_calibration))
     }}
 
 ##################################################
@@ -2778,7 +2856,7 @@ actions:
   - if:
       - condition: template
         value_template:
-          "{{ (is_aggressive_mode or is_generic_calibration) and is_physical_change_enabled }}"
+          "{{ ((is_aggressive_mode and not is_aggressive_mode_calibration) or is_generic_calibration) and is_physical_change_enabled }}"
     then:
       - action: system_log.write
         data:
@@ -2910,12 +2988,20 @@ actions:
           - condition: template
             value_template: "{{ not is_legacy_restore }}"
         sequence:
-          - action: scene.turn_on
-            target:
-              entity_id: "{{ scene_to_apply }}"
-          - action: scene.delete
-            target:
-              entity_id: "{{ scene_to_apply }}"
+          - if:
+             - condition: template
+               value_template: "{{ states[scene_to_apply] != none }}"
+            then:
+              - action: scene.turn_on
+                target:
+                  entity_id: "{{ scene_to_apply }}"
+          - if:
+             - condition: template
+               value_template: "{{ states[scene_to_apply] != none }}"
+            then:
+              - action: scene.delete
+                target:
+                  entity_id: "{{ scene_to_apply }}"
 
     default:
       - if :
@@ -3038,6 +3124,10 @@ actions:
                 calibration_entity: "{{ (calibration_number.keys() | list) [index] }}"
                 thermostat: "{{ (((calibration_number.values() | list) [index]) | first) ['valve'] }}"
                 offset: "{{ (((calibration_number.values() | list) [index]) | first) ['value'] }}"
+                select_entity: "{{ device_entities(device_id(thermostat)) |
+                            expand | selectattr('domain','in','select') |
+                            selectattr('attributes.options', 'contains', 'external') |
+                            map(attribute='entity_id') | list | first | default(none) }}"
 
             - action: system_log.write
               data:
@@ -3047,6 +3137,22 @@ actions:
                   offset: {{ offset }}
                 level: !input input_log_level
                 logger: blueprints.panhans.heatingcontrol
+
+            - if:
+                - condition: template
+                  value_template: "{{ thermostat in valves_xiaomi }}"
+                - condition: template
+                  value_template: "{{ select_entity is defined and not is_state(select_entity, 'external') }}"
+              then:
+                - action: select.select_option
+                  target:
+                    entity_id: "{{ select_entity }}"
+                  data:
+                    option: external
+                - delay:
+                    hours: "{{ input_action_call_delay.hours }}"
+                    minutes: "{{ input_action_call_delay.minutes }}"
+                    seconds: "{{ input_action_call_delay.seconds }}"
 
             - action: number.set_value
               data:
