@@ -206,7 +206,7 @@ blueprint:
 
 
             Here you can setup some adjustments to your heating schedule.<br/><br/>
-            *Note*: Here you can set values for eco or comfort temperature. The switch between those target temperatures is controled by schedules, presence sensors, proximite, ect.
+            *Note*: Here you can set values for eco or comfort temperature. The switch between those target temperatures is controled by schedules, presence sensors, proximity, ect.
             <br/>
 
             <details>
@@ -1434,31 +1434,28 @@ trigger:
     id: temperature_change_person_proximity_on
     value_template: >
       {% set proximity_entities = device_entities(input_proximity) %}
+      
       {% set is_arrived = proximity_entities  | expand 
-                                                | selectattr('attributes.device_class', 'eq', 'enum') 
-                                                | map(attribute='entity_id') | select('is_state','arrived') 
-                                                | list | count > 0 %}
+                                          | selectattr('attributes.device_class', 'eq', 'enum') 
+                                          | map(attribute='entity_id') | select('is_state','arrived') 
+                                          | list | count > 0 %}
 
       {% set entities_towards = proximity_entities  | expand 
                                               | selectattr('attributes.device_class', 'eq', 'enum') 
                                               | map(attribute='entity_id') | select('is_state','towards') 
+                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
                                               | list %}
 
       {% set entities_distances = proximity_entities  | expand 
                                               | selectattr('attributes.device_class', 'eq', 'distance')
+                                              | selectattr('state', '<', input_proximity_distance | string)
                                               | map(attribute='entity_id')
+                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
                                               | list %}
 
-      {% set result = namespace(is_towards=false) %}
-      {% for t in entities_towards %}
-        {% set name = t.split('_')[:-1] | join('_') %}
-        {% set entities_distances_filtered = entities_distances | expand | selectattr('entity_id','search',name) | map(attribute='entity_id') | list %}
-        {% if result.is_towards == false and entities_distances_filtered | count > 0 %}
-          {% set result.is_towards = states(entities_distances_filtered | first) | int <= input_proximity_distance | int %}
-        {% endif %}
-      {% endfor %}
-      {% set is_towards = result.is_towards %}
-      {{ is_towards or is_arrived }}
+      {% set entites_towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
+
+      {{ entites_towards_and_in_distance or is_arrived }}
     for: !input input_proximity_duration
 
   - trigger: template
@@ -1466,30 +1463,26 @@ trigger:
     value_template: >
       {% set proximity_entities = device_entities(input_proximity) %}
       {% set is_arrived = proximity_entities  | expand 
-                                                | selectattr('attributes.device_class', 'eq', 'enum') 
-                                                | map(attribute='entity_id') | select('is_state','arrived') 
-                                                | list | count > 0 %}
+                                          | selectattr('attributes.device_class', 'eq', 'enum') 
+                                          | map(attribute='entity_id') | select('is_state','arrived') 
+                                          | list | count > 0 %}
 
       {% set entities_towards = proximity_entities  | expand 
                                               | selectattr('attributes.device_class', 'eq', 'enum') 
                                               | map(attribute='entity_id') | select('is_state','towards') 
+                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
                                               | list %}
 
       {% set entities_distances = proximity_entities  | expand 
                                               | selectattr('attributes.device_class', 'eq', 'distance')
+                                              | selectattr('state', '<', input_proximity_distance | string)
                                               | map(attribute='entity_id')
+                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
                                               | list %}
 
-      {% set result = namespace(is_towards=false) %}
-      {% for t in entities_towards %}
-        {% set name = t.split('_')[:-1] | join('_') %}
-        {% set entities_distances_filtered = entities_distances | expand | selectattr('entity_id','search',name) | map(attribute='entity_id') | list %}
-        {% if result.is_towards == false and entities_distances_filtered | count > 0 %}
-          {% set result.is_towards = states(entities_distances_filtered | first) | int <= input_proximity_distance | int %}
-        {% endif %}
-      {% endfor %}
-      {% set is_towards = result.is_towards %}
-      {{ is_towards == false and is_arrived == false }}
+      {% set entites_towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
+
+      {{ entites_towards_and_in_distance == false and is_arrived == false }}
     for: !input input_proximity_duration
 
   # W I N D O W  O P E N
@@ -1900,6 +1893,43 @@ variables:
   state_presence: >
     {{ iif(is_presence_sensor_defined, state_presence_scheduler and state_presence_sensor, state_presence_sensor) }}
 
+  # proximity
+  state_proximity_arrived: >
+    {% set proximity_entities = device_entities(input_proximity) %}
+    {% set is_arrived = proximity_entities  | expand 
+                                        | selectattr('attributes.device_class', 'eq', 'enum') 
+                                        | map(attribute='entity_id') | select('is_state','arrived') 
+                                        | list | count > 0 %}
+    {{ is_arrived }}
+
+  state_proximity_way_home: >
+    {% set proximity_entities = device_entities(input_proximity) %}
+
+    {% set earliest_timestamp = now() - timedelta(**input_proximity_duration) %}
+    {% set uptime_duration = as_datetime(uptime) + timedelta(**input_proximity_duration) %}
+
+    {% if uptime_duration > earliest_timestamp %}
+      {% set earliest_timestamp = uptime_duration%}
+    {% endif %}
+
+    {% set entities_towards = proximity_entities  | expand 
+                                            | selectattr('attributes.device_class', 'eq', 'enum') 
+                                            | selectattr('last_changed', '<=', earliest_timestamp)
+                                            | map(attribute='entity_id') | select('is_state','towards')
+                                            | map('regex_replace','_(?=[^_]*$)(.*)', '')
+                                            | list %}
+
+    {% set entities_distances = proximity_entities  | expand 
+                                            | selectattr('attributes.device_class', 'eq', 'distance')
+                                            | selectattr('state', '<', input_proximity_distance | string)
+                                            | map(attribute='entity_id')
+                                            | map('regex_replace','_(?=[^_]*$)(.*)', '')
+                                            | list %}
+
+    {% set towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
+
+    {{ towards_and_in_distance }}
+
   # thermostat groups
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
   valves_unsupported: "{{ input_trvs | reject('in',valves) | list }}"
@@ -1922,5 +1952,7 @@ actions:
       state_presence_sensor: "{{ state_presence_sensor }}"
       state_presence_scheduler: "{{ state_presence_scheduler }}"
       state_presence: "{{ state_presence }}"
+      state_proximity_arrived: "{{ state_proximity_arrived }}"
+      state_proximity_way_home: "{{ state_proximity_way_home }}"
 
 mode: queued
