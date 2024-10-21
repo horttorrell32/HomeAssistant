@@ -1192,10 +1192,23 @@ blueprint:
 ##################################################
 
 trigger_variables:
+  # uptime
+  uptime_sensor: "{{ integration_entities('uptime') | first | default(none) }}"
+  is_uptime_defined: "{{ uptime_sensor != none }}"
+
+  # people
+  input_persons: !input input_persons
+  input_mode_guest: !input input_mode_guest
+  input_people_entering_home_duration: !input input_people_entering_home_duration
+  input_people_leaving_home_duration: !input input_people_leaving_home_duration
+
+  input_person_count: "{{ input_persons | count }}"
+  is_person_defined: "{{ input_person_count > 0 }}"
+  is_guest_mode_defined: "{{ input_mode_guest != none }}"
+
   # M O D E S
   input_mode_winter: !input input_mode_winter
   input_mode_party: !input input_mode_party
-  input_mode_guest: !input input_mode_guest
   input_force_max_temperature: !input input_force_max_temperature
   input_hvac_mode: !input input_hvac_mode
 
@@ -1212,7 +1225,6 @@ trigger_variables:
   input_trvs: !input input_trvs
   input_windows: !input input_windows
   input_temperature_sensor: !input input_temperature_sensor
-  input_persons: !input input_persons
   input_presence_sensor: !input input_presence_sensor
   input_calibration_timeout: !input input_calibration_timeout
 
@@ -1307,67 +1319,91 @@ trigger:
   - trigger: template
     id: temperature_change_scheduler_on
     value_template: >
-      {% set trigger_state = 'on' %}
-      {% set selected_scheduler = '' %}
+      {% set selected_scheduler = none %}
+      {% set schedules_count = input_schedulers | count %}
 
-      {% if input_schedulers | count == 0 %}
-        {% set selected_scheduler = '' %}
-      {% elif input_schedulers | count == 1 or input_scheduler_selector == none %}
-        {% set selected_scheduler = input_schedulers[0] %}
-      {% elif input_schedulers | count > 1 %}
-        {% set selected_scheduler = input_schedulers[0] %}
+      {% if schedules_count == 0 %}
+        {% set selected_scheduler = none %}
+      {% elif schedules_count == 1 or input_scheduler_selector == none %}
+        {% set selected_scheduler = input_schedulers | first %}
+      {% elif schedules_count > 1 %}
         {% set selector_value = states(input_scheduler_selector) %}
 
         {% if is_number(selector_value) %}
-          {% set selector_value = iif(selector_value | int > (input_schedulers | count), input_schedulers | count, selector_value) %}
+          {% set selector_value = iif(selector_value | int > schedules_count, schedules_count, selector_value) %}
           {% set selector_value = iif(selector_value | int <= 0, 1, selector_value) %}
-          {% set selected_scheduler = input_schedulers[(selector_value | int) - 1] %}
+          {% set selected_scheduler = input_schedulers[selector_value | int - 1] %}
         {% elif selector_value in ['on','off'] %}
           {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
         {% else %}
-          {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)'+selector_value) | map(attribute='entity_id') | first | default(selected_scheduler) %}
+          {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
+          {% if (selected_scheduler == none) %}
+            {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
+          {% endif %}
         {% endif %}
-
       {% endif %}
 
-      {{ iif(selected_scheduler != '', is_state(selected_scheduler, trigger_state), false) }}
+      {% if selected_scheduler == none %}
+        {{ false }}
+      {% else %}
+        {{ is_state(selected_scheduler, 'on') }}
+      {% endif %}
 
   - trigger: template
     id: temperature_change_scheduler_off
     value_template: >
-      {% set trigger_state = 'off' %}
-      {% set selected_scheduler = '' %}
+      {% set selected_scheduler = none %}
+      {% set schedules_count = input_schedulers | count %}
 
-      {% if input_schedulers | count == 0 %}
-        {% set selected_scheduler = '' %}
-      {% elif input_schedulers | count == 1 or input_scheduler_selector == none %}
-        {% set selected_scheduler = input_schedulers[0] %}
-      {% elif input_schedulers | count > 1 %}
-        {% set selected_scheduler = input_schedulers[0] %}
+      {% if schedules_count == 0 %}
+        {% set selected_scheduler = none %}
+      {% elif schedules_count == 1 or input_scheduler_selector == none %}
+        {% set selected_scheduler = input_schedulers | first %}
+      {% elif schedules_count > 1 %}
         {% set selector_value = states(input_scheduler_selector) %}
 
         {% if is_number(selector_value) %}
-          {% set selector_value = iif(selector_value | int > (input_schedulers | count), input_schedulers | count, selector_value) %}
+          {% set selector_value = iif(selector_value | int > schedules_count, schedules_count, selector_value) %}
           {% set selector_value = iif(selector_value | int <= 0, 1, selector_value) %}
-          {% set selected_scheduler = input_schedulers[(selector_value | int) - 1] %}
+          {% set selected_scheduler = input_schedulers[selector_value | int - 1] %}
         {% elif selector_value in ['on','off'] %}
           {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
         {% else %}
-          {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)'+selector_value) | map(attribute='entity_id') | first | default(selected_scheduler) %}
+          {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
+          {% if (selected_scheduler == none) %}
+            {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
+          {% endif %}
         {% endif %}
-
       {% endif %}
 
-      {{ iif(selected_scheduler != '', is_state(selected_scheduler, trigger_state), false) }}
+      {% if selected_scheduler == none %}
+        {{ false }}
+      {% else %}
+        {{ is_state(selected_scheduler, 'off') }}
+      {% endif %}
 
-  # P E R S O N  P R E S E N C E
+  # persons
   - trigger: template
-    value_template: "{{ expand(input_persons) | selectattr('state', 'eq', 'home') | list | count > 0 }}"
-    for: !input input_people_entering_home_duration
+    value_template: >
+      {{ input_persons  | expand 
+                        | selectattr('state', 'eq', 'home') 
+                        | map(attribute='entity_id') 
+                        | list 
+                        | count > 0 
+                        
+        or (is_guest_mode_defined and states(input_mode_guest) in ['on','active'] ) }}
     id: temperature_change_person_on
+    for: !input input_people_entering_home_duration
 
   - trigger: template
-    value_template: "{{ expand(input_persons) | selectattr('state', 'eq', 'home') | list | count == 0 }}"
+    value_template: >
+        {{ input_persons  | expand 
+                          | selectattr('state', 'eq', 'home') 
+                          | map(attribute='entity_id') 
+                          | list 
+                          | count == 0 
+          
+          and (is_guest_mode_defined and states(input_mode_guest) not in ['on','active'] ) }}
     id: temperature_change_person_off
     for: !input input_people_leaving_home_duration
 
@@ -1546,19 +1582,6 @@ trigger:
   - trigger: template
     value_template: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | list | count == 0 }}"
     id: temperature_change_party_off
-    for:
-      seconds: 2
-
-  # M O D E   -   G U E S T
-  - trigger: template
-    id: temperature_change_person_guest_on
-    value_template: "{{ input_mode_guest != none and states(input_mode_guest) in ['on','active'] }}"
-    for:
-      seconds: 2
-
-  - trigger: template
-    value_template: "{{ input_mode_guest != none and states(input_mode_guest) in ['off','idle','paused'] }}"
-    id: temperature_change_person_guest_off
     for:
       seconds: 2
 
@@ -1825,6 +1848,33 @@ variables:
       {% endif %}
     {% endif %}
 
+  # schedules
+  active_scheduler: >
+    {% set selected_scheduler = none %}
+    {% set schedules_count = input_schedulers | count %}
+
+    {% if schedules_count == 0 %}
+      {% set selected_scheduler = none %}
+    {% elif schedules_count == 1 or input_scheduler_selector == none %}
+      {% set selected_scheduler = input_schedulers | first %}
+    {% elif schedules_count > 1 %}
+      {% set selector_value = states(input_scheduler_selector) %}
+
+      {% if is_number(selector_value) %}
+        {% set selector_value = iif(selector_value | int > schedules_count, schedules_count, selector_value) %}
+        {% set selector_value = iif(selector_value | int <= 0, 1, selector_value) %}
+        {% set selected_scheduler = input_schedulers[selector_value | int - 1] %}
+      {% elif selector_value in ['on','off'] %}
+        {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
+      {% else %}
+        {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
+        {% if (selected_scheduler == none) %}
+          {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
+
+    {{ selected_scheduler }}
 
   # thermostat groups
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
@@ -1844,5 +1894,6 @@ actions:
       automation: "{{ this.entity_id }}"
       is_anybody_home: "{{ is_anybody_home }}"
       is_guest_mode: "{{ is_guest_mode }}"
+      active_scheduler: "{{ active_scheduler }}"
 
 mode: queued
