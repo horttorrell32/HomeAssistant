@@ -1279,7 +1279,7 @@ trigger:
       {{ not (input_liming_protection and not state_winter_mode and is_liming_day and is_liming_time) }}
     id: temperature_change_liming_protection_off
 
-  # S Y S T E M   T R I G G E R S
+  # system
   - trigger: homeassistant
     event: start
     id: temperature_change_hastart
@@ -1315,7 +1315,32 @@ trigger:
       {% endif %}
     id: temperature_change_comfort
 
-  # S C H E D U L E R   O N / O F F
+  # persons
+  - trigger: template
+    value_template: >
+      {{ input_persons  | expand 
+                        | selectattr('state', 'eq', 'home') 
+                        | map(attribute='entity_id') 
+                        | list 
+                        | count > 0 
+                        
+        or (is_guest_mode_defined and states(input_mode_guest) in ['on','active'] ) }}
+    id: temperature_change_person_on
+    for: !input input_people_entering_home_duration
+
+  - trigger: template
+    value_template: >
+        {{ input_persons  | expand 
+                          | selectattr('state', 'eq', 'home') 
+                          | map(attribute='entity_id') 
+                          | list 
+                          | count == 0 
+          
+          and (is_guest_mode_defined and states(input_mode_guest) not in ['on','active'] ) }}
+    id: temperature_change_person_off
+    for: !input input_people_leaving_home_duration
+
+  # scheduler
   - trigger: template
     id: temperature_change_scheduler_on
     value_template: >
@@ -1382,30 +1407,27 @@ trigger:
         {{ is_state(selected_scheduler, 'off') }}
       {% endif %}
 
-  # persons
+  # presence sensor
   - trigger: template
-    value_template: >
-      {{ input_persons  | expand 
-                        | selectattr('state', 'eq', 'home') 
-                        | map(attribute='entity_id') 
-                        | list 
-                        | count > 0 
-                        
-        or (is_guest_mode_defined and states(input_mode_guest) in ['on','active'] ) }}
-    id: temperature_change_person_on
-    for: !input input_people_entering_home_duration
+    id: temperature_change_presence_on
+    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'on') }}"
+    for: !input input_presence_reaction_on_time
 
   - trigger: template
-    value_template: >
-        {{ input_persons  | expand 
-                          | selectattr('state', 'eq', 'home') 
-                          | map(attribute='entity_id') 
-                          | list 
-                          | count == 0 
-          
-          and (is_guest_mode_defined and states(input_mode_guest) not in ['on','active'] ) }}
-    id: temperature_change_person_off
-    for: !input input_people_leaving_home_duration
+    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'off') }}"
+    id: temperature_change_presence_off
+    for: !input input_presence_reaction_off_time
+
+  # presence scheduler
+  - trigger: template
+    id: temperature_change_presence_scheduler_on
+    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'on') }}"
+    for: !input input_action_call_delay
+
+  - trigger: template
+    id: temperature_change_presence_scheduler_off
+    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'off') }}"
+    for: !input input_action_call_delay
 
   # P R O X I M I T Y
   - trigger: template
@@ -1582,30 +1604,6 @@ trigger:
   - trigger: template
     value_template: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | list | count == 0 }}"
     id: temperature_change_party_off
-    for:
-      seconds: 2
-
-  # P R E S E N C E   S E N S O R
-  - trigger: template
-    id: temperature_change_presence_on
-    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'on') }}"
-    for: !input input_presence_reaction_on_time
-
-  - trigger: template
-    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'off') }}"
-    id: temperature_change_presence_off
-    for: !input input_presence_reaction_off_time
-
-  # P R E S E N C E   S C H E D U L E R
-  - trigger: template
-    id: temperature_change_presence_scheduler_on
-    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'on') }}"
-    for:
-      seconds: 2
-
-  - trigger: template
-    id: temperature_change_presence_scheduler_off
-    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'off') }}"
     for:
       seconds: 2
 
@@ -1876,6 +1874,32 @@ variables:
 
     {{ selected_scheduler }}
 
+  # presence
+  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
+  is_presence_scheduler_defined: "{{ input_scheduler_presence != none }}"
+  state_presence_scheduler: "{{ is_presence_scheduler_defined and is_state(input_scheduler_presence, 'on') }}"
+
+  state_presence_sensor: >
+    {% if not is_presence_sensor_defined %}
+      {{ false }}
+    {% else %}
+      {% set last_changed = [input_presence_sensor] | expand | map(attribute='last_changed') | first %}
+      {% set sensor_state = is_state(input_presence_sensor, 'on') %}
+      {% set reaction_time = iif(sensor_state, input_presence_reaction_on_time, input_presence_reaction_off_time) %}
+      {% set min_timestamp = last_changed + timedelta(**reaction_time) %}
+
+      {% if is_uptime_defined and as_datetime(uptime) + timedelta(**reaction_time) > now() - timedelta(**reaction_time) %}
+        {{ sensor_state }}
+      {% else %}
+        {% set is_limit = min_timestamp <= now() %}
+
+        {{ (sensor_state == true and is_limit) or (sensor_state == false and not is_limit) }}
+      {% endif %}
+    {% endif %}
+
+  state_presence: >
+    {{ iif(is_presence_sensor_defined, state_presence_scheduler and state_presence_sensor, state_presence_sensor) }}
+
   # thermostat groups
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
   valves_unsupported: "{{ input_trvs | reject('in',valves) | list }}"
@@ -1895,5 +1919,8 @@ actions:
       is_anybody_home: "{{ is_anybody_home }}"
       is_guest_mode: "{{ is_guest_mode }}"
       active_scheduler: "{{ active_scheduler }}"
+      state_presence_sensor: "{{ state_presence_sensor }}"
+      state_presence_scheduler: "{{ state_presence_scheduler }}"
+      state_presence: "{{ state_presence }}"
 
 mode: queued
