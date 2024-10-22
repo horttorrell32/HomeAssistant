@@ -1014,6 +1014,17 @@ blueprint:
           selector:
             time:
 
+        input_liming_in_winter:
+          name: 🌨️ Liming In Winter / Liming If Automation is Disabled
+          description: >
+            `liming protection`
+
+
+            Enable this if you want liming protection even if the automation is active.
+          default: false
+          selector:
+            boolean:
+
     # W I N T E R  M O D E
     toggle_section:
       name: "On/Off Automation Options"
@@ -1236,8 +1247,8 @@ trigger_variables:
   # MODE ON / OFF
   input_mode_outside_temperature: !input input_mode_outside_temperature
   input_mode_outside_temperature_threshold: !input input_mode_outside_temperature_threshold
-  is_mode_room_temperature: !input input_mode_room_temperature
   input_mode_room_temperature_threshold: !input input_mode_room_temperature_threshold
+  input_mode_room_temperature: !input input_mode_room_temperature
 
   input_frost_protection_duration: !input input_frost_protection_duration
 
@@ -1251,33 +1262,42 @@ trigger_variables:
   input_liming_protection: !input input_liming_protection
   input_liming_protection_day: !input input_liming_protection_day
   input_liming_protection_time: !input input_liming_protection_time
+  input_liming_in_winter: !input input_liming_in_winter
 
 trigger:
   # LIMING PROTECTION
   - trigger: template
     value_template: >
-      {% set state_winter_mode = true %}
-      {% if input_mode_winter != none %}
-        {% set state_winter_mode = is_state(input_mode_winter,'on') %}
+      {% if not input_liming_protection%}
+        {{ false }}
+      {% else %}
+        {% set enable_liming = true %}
+        {% if input_mode_winter != none %}
+          {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
+        {% endif %}
+
+        {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
+        {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
+
+        {{ enable_liming and is_liming_day and is_liming_time }}
       {% endif %}
-
-      {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
-      {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
-
-      {{ input_liming_protection and not state_winter_mode and is_liming_day and is_liming_time }}
     id: temperature_change_liming_protection_on
 
   - trigger: template
     value_template: >
-      {% set state_winter_mode = true %}
-      {% if input_mode_winter != none %}
-        {% set state_winter_mode = is_state(input_mode_winter,'on') %}
+      {% if not input_liming_protection%}
+        {{ false }}
+      {% else %}
+        {% set enable_liming = true %}
+        {% if input_mode_winter != none %}
+          {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
+        {% endif %}
+
+        {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
+        {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
+
+        {{ not (enable_liming and is_liming_day and is_liming_time) }}
       {% endif %}
-
-      {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
-      {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
-
-      {{ not (input_liming_protection and not state_winter_mode and is_liming_day and is_liming_time) }}
     id: temperature_change_liming_protection_off
 
   # system
@@ -1501,13 +1521,13 @@ trigger:
     for: !input input_windows_reaction_time_close
     id: temperature_change_window_off
 
-  # M O D E   -   W I N T E R
+  # on/off winter mode
   - trigger: template
     id: temperature_change_winter_mode_on
     value_template: >
       {% if input_mode_winter != none %}
         {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
-        {{ states(input_mode_winter) == activation_state }}
+        {{ is_state(input_mode_winter, activation_state) }}
       {% endif %}
     for: !input input_action_call_delay
 
@@ -1516,63 +1536,67 @@ trigger:
     value_template: >
       {% if input_mode_winter != none %}
         {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
-        {{ states(input_mode_winter) != activation_state }}
+        {{ not is_state(input_mode_winter, activation_state) }}
       {% endif %}
     for: !input input_action_call_delay
 
-  # O U T S I D E   T E M P E R A T U R E
+  # on/off temperature
   - trigger: template
     id: temperature_change_outside_on
     value_template: >
-      {% set outside_state = iif(input_mode_outside_temperature != none,false,true) %}
+      {% if input_mode_outside_temperature == none %}
+        {{ false }}
+      {% else %}
+        {% set outside_state = false %}
+        {% set use_room_temp = input_mode_room_temperature and is_presence_sensor_defined %}
+        {% set room_state = iif(use_room_temp, false, true) %}
 
-      {% if input_mode_outside_temperature != none %}
         {% set state = states(input_mode_outside_temperature) %}
         {% set state = iif(is_number(state) == true, state, state_attr(input_mode_outside_temperature,'temperature'))%}
 
         {% if is_number(state) %}
           {% set outside_state = (state | float - input_mode_outside_temperature_threshold | float) * factor < 0 %}
         {% endif %}
-      {% endif %}
 
-      {% set room_state = iif(is_mode_room_temperature and input_temperature_sensor != none,false,true) %}
+        {% if use_room_temp %}
+          {% set state = states(input_temperature_sensor) %}
 
-      {% if input_temperature_sensor != none and is_mode_room_temperature %}
-        {% set state = states(input_temperature_sensor) %}
-
-        {% if is_number(state) %}
-          {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
+          {% if is_number(state) %}
+            {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
+          {% endif %}
         {% endif %}
-      {% endif %}
 
-      {{ (input_temperature_sensor != none and is_mode_room_temperature) and room_state and outside_state }}
+        {{ room_state and outside_state }}
+      {% endif %}
     for: !input input_action_call_delay
 
   - trigger: template
     id: temperature_change_outside_off
     value_template: >
-      {% set outside_state = iif(input_mode_outside_temperature != none,false,true) %}
+      {% if input_mode_outside_temperature == none %}
+        {{ false }}
+      {% else %}
+        {% set outside_state = false %}
+        {% set use_room_temp = input_mode_room_temperature and is_presence_sensor_defined %}
+        {% set room_state = iif(use_room_temp, false, true) %}
 
-      {% if input_mode_outside_temperature != none %}
         {% set state = states(input_mode_outside_temperature) %}
         {% set state = iif(is_number(state) == true, state, state_attr(input_mode_outside_temperature,'temperature'))%}
 
         {% if is_number(state) %}
           {% set outside_state = (state | float - input_mode_outside_temperature_threshold | float) * factor < 0 %}
         {% endif %}
-      {% endif %}
 
-      {% set room_state = iif(is_mode_room_temperature and input_temperature_sensor != none,false,true) %}
+        {% if use_room_temp %}
+          {% set state = states(input_temperature_sensor) %}
 
-      {% if input_temperature_sensor != none and is_mode_room_temperature %}
-        {% set state = states(input_temperature_sensor) %}
-
-        {% if is_number(state) %}
-          {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
+          {% if is_number(state) %}
+            {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
+          {% endif %}
         {% endif %}
-      {% endif %}
 
-      {{ (input_temperature_sensor != none and is_mode_room_temperature) and (not room_state or not outside_state) }}
+        {{ not (room_state and outside_state) }}
+      {% endif %}
     for: !input input_action_call_delay
 
   # force max temp
@@ -1707,6 +1731,7 @@ variables:
   input_liming_protection: !input input_liming_protection
   input_liming_protection_day: !input input_liming_protection_day
   input_liming_protection_time: !input input_liming_protection_time
+  input_liming_in_winter: !input input_liming_in_winter
 
   # heating scheduler
   input_schedulers: !input input_schedulers
@@ -1730,6 +1755,8 @@ variables:
   input_invert_winter_mode_value: !input input_invert_winter_mode_value
   input_mode_outside_temperature: !input input_mode_outside_temperature
   input_mode_outside_temperature_threshold: !input input_mode_outside_temperature_threshold
+  input_mode_room_temperature: !input input_mode_room_temperature
+  input_mode_room_temperature_threshold: !input input_mode_room_temperature_threshold  
 
   # proximity
   input_proximity: !input input_proximity
@@ -1788,6 +1815,42 @@ variables:
     {% else %}
       {{ now() }}
     {% endif %}
+
+  # on/off
+  state_outside_temp: >
+    {% if input_mode_outside_temperature == none %}
+      {{ none }}
+    {% else %}
+      {% set outside_state = false %}
+      {% set use_room_temp = input_mode_room_temperature and is_presence_sensor_defined %}
+      {% set room_state = iif(use_room_temp, false, true) %}
+
+      {% set state = states(input_mode_outside_temperature) %}
+      {% set state = iif(is_number(state) == true, state, state_attr(input_mode_outside_temperature,'temperature'))%}
+
+      {% if is_number(state) %}
+        {% set outside_state = (state | float - input_mode_outside_temperature_threshold | float) * factor < 0 %}
+      {% endif %}
+
+      {% if use_room_temp %}
+        {% set state = states(input_temperature_sensor) %}
+
+        {% if is_number(state) %}
+          {% set room_state = (state | float - input_mode_room_temperature_threshold | float) * factor < 0 %}
+        {% endif %}
+      {% endif %}
+
+      {{ room_state and outside_state }}
+    {% endif %}
+
+  state_ahc: >
+    {% set result = true %}
+    {% if input_mode_winter != none %}
+      {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
+      {% set result = is_state(input_mode_winter, activation_state) %}
+    {% endif %}
+
+    {{ iif(state_outside_temp == none, result, result and state_outside_temp) }}
 
   # persons
   is_person_defined: "{{ input_persons | count > 0 }}"
@@ -2009,6 +2072,22 @@ variables:
       {% endif %}
     {% endif %}
 
+  # liming protection
+  is_liming_protection: >
+    {% if not input_liming_protection%}
+      {{ false }}
+    {% else %}
+      {% set enable_liming = true %}
+      {% if input_mode_winter != none %}
+        {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
+      {% endif %}
+
+      {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
+      {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
+
+      {{ enable_liming and is_liming_day and is_liming_time }}
+    {% endif %}
+
   # thermostat groups
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
   valves_unsupported: "{{ input_trvs | reject('in',valves) | list }}"
@@ -2018,7 +2097,6 @@ variables:
   # global
   factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
   no_changes: "{{ input_persons | count == 0 and input_mode_guest == none and input_schedulers | count == 0 and input_presence_sensor == none and input_proximity == none }}"
-  winter_mode: "{{ true }}"
   set_comfort: "{{ false }}"
 
 conditions: []
@@ -2026,7 +2104,7 @@ conditions: []
 actions:
   - event: ahc_event
     event_data:
-      state: "{{ winter_mode }}"
+      state: "{{ state_ahc }}"
       mode: "{{ iif(set_comfort == true, 'comfort', 'eco') }}"
       automation: "{{ this.entity_id }}"
       is_anybody_home: "{{ is_anybody_home }}"
@@ -2045,5 +2123,7 @@ actions:
       state_window: "{{ state_window }}"
       is_aggressive_mode: "{{ is_aggressive_mode }}"
       is_frost_protection: "{{ is_frost_protection }}"
+      is_liming_protection: "{{ is_liming_protection }}"
+      state_outside_temp: "{{ state_outside_temp }}"
 
 mode: queued
