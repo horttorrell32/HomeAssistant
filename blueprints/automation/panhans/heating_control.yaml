@@ -1226,6 +1226,7 @@ trigger_variables:
   input_windows: !input input_windows
   input_temperature_sensor: !input input_temperature_sensor
   input_presence_sensor: !input input_presence_sensor
+  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
   input_calibration_timeout: !input input_calibration_timeout
 
   input_proximity: !input input_proximity
@@ -1433,23 +1434,26 @@ trigger:
     value_template: >
       {% set proximity_entities = device_entities(input_proximity) %}
       
-      {% set is_arrived = proximity_entities  | expand 
-                                          | selectattr('attributes.device_class', 'eq', 'enum')
-                                          | select('is_state','arrived') 
-                                          | list | count > 0 %}
+      {% set is_arrived = proximity_entities  
+          | select('is_state','arrived') 
+          | expand 
+          | selectattr('attributes.device_class', 'eq', 'enum')
+          | list | count > 0 %}
 
-      {% set entities_towards = proximity_entities  | expand 
-                                              | selectattr('attributes.device_class', 'eq', 'enum') 
-                                              | map(attribute='entity_id') | select('is_state','towards') 
-                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
-                                              | list %}
+      {% set entities_towards = proximity_entities  
+          | expand 
+          | selectattr('attributes.device_class', 'eq', 'enum') 
+          | map(attribute='entity_id') | select('is_state','towards') 
+          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | list %}
 
-      {% set entities_distances = proximity_entities  | expand 
-                                              | selectattr('attributes.device_class', 'eq', 'distance')
-                                              | selectattr('state', '<', input_proximity_distance | string)
-                                              | map(attribute='entity_id')
-                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
-                                              | list %}
+      {% set entities_distances = proximity_entities  
+          | expand 
+          | selectattr('attributes.device_class', 'eq', 'distance')
+          | selectattr('state', '<', input_proximity_distance | string)
+          | map(attribute='entity_id')
+          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | list %}
 
       {% set entites_towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
 
@@ -1460,30 +1464,33 @@ trigger:
     id: temperature_change_person_proximity_off
     value_template: >
       {% set proximity_entities = device_entities(input_proximity) %}
-      {% set is_arrived = proximity_entities  | expand 
-                                          | selectattr('attributes.device_class', 'eq', 'enum') 
-                                          | select('is_state','arrived') 
-                                          | list | count > 0 %}
+      {% set is_arrived = proximity_entities  
+          | select('is_state','arrived') 
+          | expand 
+          | selectattr('attributes.device_class', 'eq', 'enum') 
+          | list | count > 0 %}
 
-      {% set entities_towards = proximity_entities  | expand 
-                                              | selectattr('attributes.device_class', 'eq', 'enum') 
-                                              | map(attribute='entity_id') | select('is_state','towards') 
-                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
-                                              | list %}
+      {% set entities_towards = proximity_entities  
+          | expand 
+          | selectattr('attributes.device_class', 'eq', 'enum') 
+          | map(attribute='entity_id') | select('is_state','towards') 
+          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | list %}
 
-      {% set entities_distances = proximity_entities  | expand 
-                                              | selectattr('attributes.device_class', 'eq', 'distance')
-                                              | selectattr('state', '<', input_proximity_distance | string)
-                                              | map(attribute='entity_id')
-                                              | map('regex_replace','_(?=[^_]*$)(.*)', '')
-                                              | list %}
+      {% set entities_distances = proximity_entities  
+          | expand 
+          | selectattr('attributes.device_class', 'eq', 'distance')
+          | selectattr('state', '<', input_proximity_distance | string)
+          | map(attribute='entity_id')
+          | map('regex_replace','_(?=[^_]*$)(.*)', '')
+          | list %}
 
       {% set entites_towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
 
       {{ entites_towards_and_in_distance == false and is_arrived == false }}
     for: !input input_proximity_duration
 
-  # W I N D O W  O P E N
+  # window
   - trigger: template
     value_template: "{{ expand(input_windows) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
     for: !input input_windows_reaction_time_open
@@ -1568,19 +1575,18 @@ trigger:
       {{ (input_temperature_sensor != none and is_mode_room_temperature) and (not room_state or not outside_state) }}
     for: !input input_action_call_delay
 
-  # M O D E   -   M A I N T A N A C E
+  # force max temp
   - trigger: template
     id: temperature_change_force_max_temperature_on
     value_template: "{{ input_force_max_temperature != none and is_state(input_force_max_temperature, 'on') }}"
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   - trigger: template
     id: temperature_change_force_max_temperature_off
     value_template: "{{ input_force_max_temperature != none and is_state(input_force_max_temperature, 'off') }}"
     for: !input input_action_call_delay
 
-  # M O D E   -   P A R T Y
+  # party
   - trigger: template
     id: temperature_change_party_on
     value_template: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | list | count > 0 }}"
@@ -1636,39 +1642,34 @@ trigger:
     id: temperature_change_heating_adjustment
     value_template: "{{ now().strftime('%H:%M') in (input_time_based_temperature_change_valve_target | map(attribute='time') | list) }}"
 
-  # F R O S T   P R O T E C T I O N
+  # frost protection
   - trigger: template
     id: temperature_change_frost_protection_on
+    for: !input input_frost_protection_duration
     value_template: >
-      {% set is_frost_protection_configured = input_frost_protection_duration.hours | int > 0 or input_frost_protection_duration.minutes | int > 0 or input_frost_protection_duration.seconds | int > 0 %}
-      {% set is_frost_protection_configured = iif(is_frost_protection_configured,is_frost_protection_configured,days in input_frost_protection_duration) %}
-      {% set person_count = input_persons | count %}
-      {% set is_person_based = person_count > 0 %}
-      {% set is_presence_based = input_presence_sensor != none %}
-      {% set person_home_count = input_persons | expand | selectattr('state','==','home') | list | count %}
-      {% set anybody_is_home = person_count > 0 and person_home_count > 0 %}
-
-      {% if (not is_frost_protection_configured) or (is_frost_protection_configured and (person_count == 0 or anybody_is_home or is_presence_based == false)) %}
+      {% set now_ts = now() %}
+      {% set frost_protection_timestamp = as_datetime(now_ts) - timedelta(**input_frost_protection_duration) %}
+      {% if frost_protection_timestamp == now_ts %}
         {{ false }}
       {% else %}
-        {% set person_fp = false %}
-        {% set presence_fp = false %}
+        {% set is_presence_fp = [input_presence_sensor] 
+            | reject('is_state','on')
+            | list
+            | count > 0 %}
 
-        {% set delta = timedelta(**input_frost_protection_duration)%}
+        {% set is_person_fp = input_persons
+            | reject('is_state','home')
+            | list
+            | count > 0  %}
 
-        {% if is_person_based %}
-          {% set last_person_leaving = input_persons | expand | sort(attribute = 'last_changed', reverse=true) | map(attribute='entity_id') | first %}
-          {% set person_fp = (now() - states.person[last_person_leaving.split('.')[1]].last_changed) >= delta %}
-        {% endif %}
-
-        {% if is_presence_based %}
-          {% set presence_fp = (now() - ([input_presence_sensor] | expand | map(attribute='last_changed') | first)) >= delta %}
-        {% endif %}
-
-        {% if is_person_based and is_presence_based %}
-          {{ person_fp and presence_fp }}
+        {% if is_person_defined and is_presence_sensor_defined %}
+          {{ is_person_fp and is_presence_fp }}
+        {% elif is_person_defined %}
+          {{ is_person_fp }}
+        {% elif is_presence_sensor_defined %}
+          {{ is_presence_fp }}
         {% else %}
-          {{ iif(is_person_based, person_fp, presence_fp) }}
+          {{ false }}
         {% endif %}
       {% endif %}
 
@@ -1888,9 +1889,10 @@ variables:
 
   state_proximity_arrived: >
     {% set proximity_entities = device_entities(input_proximity) %}
-    {% set is_arrived = proximity_entities  | expand 
-        | selectattr('attributes.device_class', 'eq', 'enum') 
+    {% set is_arrived = proximity_entities  
         | select('is_state','arrived') 
+        | expand 
+        | selectattr('attributes.device_class', 'eq', 'enum') 
         | list | count > 0 %}
     {{ is_arrived }}
 
@@ -1904,14 +1906,16 @@ variables:
       {% set earliest_timestamp = uptime_duration%}
     {% endif %}
 
-    {% set entities_towards = proximity_entities  | expand 
+    {% set entities_towards = proximity_entities  
+        | expand 
         | selectattr('attributes.device_class', 'eq', 'enum') 
         | selectattr('last_changed', '<=', earliest_timestamp)
         | map(attribute='entity_id') | select('is_state','towards')
         | map('regex_replace','_(?=[^_]*$)(.*)', '')
         | list %}
 
-    {% set entities_distances = proximity_entities  | expand 
+    {% set entities_distances = proximity_entities  
+        | expand 
         | selectattr('attributes.device_class', 'eq', 'distance')
         | selectattr('state', '<', input_proximity_distance | string)
         | map(attribute='entity_id')
@@ -1973,6 +1977,38 @@ variables:
   # aggressive mode
   is_aggressive_mode: "{{ input_aggressive_mode_offset > 0 }}"
 
+  # frost protection
+  is_frost_protection: >
+    {% set now_ts = now() %}
+    {% set frost_protection_timestamp = as_datetime(now_ts) - timedelta(**input_frost_protection_duration) %}
+    {% if frost_protection_timestamp == as_datetime(now_ts) %}
+      {{ false }}
+    {% else %}
+      {% set is_presence_fp = [input_presence_sensor] 
+          | reject('is_state','on')
+          | expand 
+          | selectattr('last_changed', '<=', frost_protection_timestamp)
+          | list
+          | count > 0 %}
+
+      {% set is_person_fp = input_persons
+          | reject('is_state','home')
+          | expand
+          | selectattr('last_changed', '<=', frost_protection_timestamp)
+          | list
+          | count > 0  %}
+
+      {% if is_person_defined and is_presence_sensor_defined %}
+        {{ is_person_fp and is_presence_fp }}
+      {% elif is_person_defined %}
+        {{ is_person_fp }}
+      {% elif is_presence_sensor_defined %}
+        {{ is_presence_fp }}
+      {% else %}
+        {{ false }}
+      {% endif %}
+    {% endif %}
+
   # thermostat groups
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
   valves_unsupported: "{{ input_trvs | reject('in',valves) | list }}"
@@ -2008,5 +2044,6 @@ actions:
       is_away: "{{ is_away }}"
       state_window: "{{ state_window }}"
       is_aggressive_mode: "{{ is_aggressive_mode }}"
+      is_frost_protection: "{{ is_frost_protection }}"
 
 mode: queued
