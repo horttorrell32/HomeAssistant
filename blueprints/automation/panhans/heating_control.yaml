@@ -1954,6 +1954,32 @@ variables:
       {{ false }}
     {% endif %}
 
+  # windows & doors
+  state_window: >
+    {% set on_time_delta = now() - timedelta(**input_windows_reaction_time_open) %}
+    {% set off_time_delta = now() - timedelta(**input_windows_reaction_time_close) %}
+
+    {% set has_open_windows = input_windows 
+        | expand
+        | selectattr('state', 'eq', 'on')
+        | selectattr('last_changed', '<=', on_time_delta)
+        | map(attribute='entity_id') 
+        | list
+        | count > 0 %}
+
+    {% set closed_but_not_in_duration = input_windows 
+        | expand
+        | selectattr('state', 'eq', 'off')
+        | selectattr('last_changed', '>=', off_time_delta)
+        | map(attribute='entity_id') 
+        | list
+        | count > 0 %}
+
+    {{ has_open_windows or closed_but_not_in_duration }}
+
+  # aggressive mode
+  is_aggressive_mode: "{{ input_aggressive_mode_offset > 0 }}"
+
   # thermostat groups
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
   valves_unsupported: "{{ input_trvs | reject('in',valves) | list }}"
@@ -1987,5 +2013,7 @@ actions:
       active_party_entity: "{{ active_party_entity }}"
       party_temp: "{{ party_temp }}"
       is_away: "{{ is_away }}"
+      state_window: "{{ state_window }}"
+      is_aggressive_mode: "{{ is_aggressive_mode }}"
 
 mode: queued
