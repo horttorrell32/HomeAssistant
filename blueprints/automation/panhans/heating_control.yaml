@@ -1320,7 +1320,6 @@ trigger:
     value_template: >
       {{ input_persons  | expand 
                         | selectattr('state', 'eq', 'home') 
-                        | map(attribute='entity_id') 
                         | list 
                         | count > 0 
                         
@@ -1332,7 +1331,6 @@ trigger:
     value_template: >
         {{ input_persons  | expand 
                           | selectattr('state', 'eq', 'home') 
-                          | map(attribute='entity_id') 
                           | list 
                           | count == 0 
           
@@ -1436,8 +1434,8 @@ trigger:
       {% set proximity_entities = device_entities(input_proximity) %}
       
       {% set is_arrived = proximity_entities  | expand 
-                                          | selectattr('attributes.device_class', 'eq', 'enum') 
-                                          | map(attribute='entity_id') | select('is_state','arrived') 
+                                          | selectattr('attributes.device_class', 'eq', 'enum')
+                                          | select('is_state','arrived') 
                                           | list | count > 0 %}
 
       {% set entities_towards = proximity_entities  | expand 
@@ -1464,7 +1462,7 @@ trigger:
       {% set proximity_entities = device_entities(input_proximity) %}
       {% set is_arrived = proximity_entities  | expand 
                                           | selectattr('attributes.device_class', 'eq', 'enum') 
-                                          | map(attribute='entity_id') | select('is_state','arrived') 
+                                          | select('is_state','arrived') 
                                           | list | count > 0 %}
 
       {% set entities_towards = proximity_entities  | expand 
@@ -1647,7 +1645,7 @@ trigger:
       {% set person_count = input_persons | count %}
       {% set is_person_based = person_count > 0 %}
       {% set is_presence_based = input_presence_sensor != none %}
-      {% set person_home_count = input_persons | expand | selectattr('state','==','home') | map(attribute='entity_id') | list | count %}
+      {% set person_home_count = input_persons | expand | selectattr('state','==','home') | list | count %}
       {% set anybody_is_home = person_count > 0 and person_home_count > 0 %}
 
       {% if (not is_frost_protection_configured) or (is_frost_protection_configured and (person_count == 0 or anybody_is_home or is_presence_based == false)) %}
@@ -1810,21 +1808,18 @@ variables:
       {% if uptime_on > on_time_delta or uptime_off > off_time_delta %}
         {{ input_persons  | expand 
                           | selectattr('state', 'eq', 'home') 
-                          | map(attribute='entity_id') 
                           | list 
                           | count > 0 }}
       {% else %}
         {% set somebody_is_home = input_persons | expand
                                             | selectattr('state', 'eq', 'home')
                                             | selectattr('last_changed', '<=', on_time_delta)
-                                            | map(attribute='entity_id') 
                                             | list
                                             | count > 0 %}
 
         {% set somebody_is_leaving = input_persons | expand 
                                                 | rejectattr('state', 'eq', 'home')
-                                                | selectattr('last_changed', '>', off_time_delta)
-                                                | map(attribute='entity_id')  
+                                                | selectattr('last_changed', '>', off_time_delta) 
                                                 | list
                                                 | count > 0 %}
 
@@ -1895,7 +1890,7 @@ variables:
     {% set proximity_entities = device_entities(input_proximity) %}
     {% set is_arrived = proximity_entities  | expand 
         | selectattr('attributes.device_class', 'eq', 'enum') 
-        | map(attribute='entity_id') | select('is_state','arrived') 
+        | select('is_state','arrived') 
         | list | count > 0 %}
     {{ is_arrived }}
 
@@ -1963,7 +1958,6 @@ variables:
         | expand
         | selectattr('state', 'eq', 'on')
         | selectattr('last_changed', '<=', on_time_delta)
-        | map(attribute='entity_id') 
         | list
         | count > 0 %}
 
@@ -1971,7 +1965,6 @@ variables:
         | expand
         | selectattr('state', 'eq', 'off')
         | selectattr('last_changed', '>=', off_time_delta)
-        | map(attribute='entity_id') 
         | list
         | count > 0 %}
 
