@@ -602,6 +602,59 @@ blueprint:
           selector:
             duration:
 
+    # P R O X I M I T Y
+    proximity_section:
+      name: Proximity
+      icon: mdi:leak
+      collapsed: true
+      input:
+        input_proximity:
+          name: ↔️ Proximity
+          description: >
+            `proximity` `optional`
+
+
+            You can preheat your rooms with help of home assistant's [proximity integration](https://www.home-assistant.io/integrations/proximity/).<br/>
+            Just select your proxmity zone and take your adjustments to distance and duration.<br/>
+            If you're in range of your distance and towards to your home heating kicks in. If you don't specify any scheduler or presence detector heating also is enabled if you arrived.<br/>
+
+            **Note**: If *on way home* is detected this gets handled like presence is on or somebody is home. So this has to match with the states of your schedulers if you use them.
+          default: ""
+          selector:
+            device:
+              filter:
+                integration: proximity
+              multiple: false
+
+        input_proximity_duration:
+          name: ⏰ Proximity Duration
+          description: >
+            `proximity`
+
+
+            Duration for which someone must be on way home before heating occurs.
+          default:
+            hours: 0
+            minutes: 2
+            seconds: 0
+          selector:
+            duration:
+
+        input_proximity_distance:
+          name: ↔️ Proximity Distance
+          description: >
+            `proximity`
+
+
+            The distance when proximity sensor gets impact for this automation. Hint: Unit depends on the setup of your integration.
+          default: 500
+          selector:
+            number:
+              min: 0
+              max: 999999999
+              step: 1
+              mode: box
+
     # AWAY MODE
     away_section:
       name: Away Mode
@@ -660,59 +713,6 @@ blueprint:
           default: false
           selector:
             boolean:
-
-    # P R O X I M I T Y
-    proximity_section:
-      name: Proximity
-      icon: mdi:leak
-      collapsed: true
-      input:
-        input_proximity:
-          name: ↔️ Proximity
-          description: >
-            `proximity` `optional`
-
-
-            You can preheat your rooms with help of home assistant's [proximity integration](https://www.home-assistant.io/integrations/proximity/).<br/>
-            Just select your proxmity zone and take your adjustments to distance and duration.<br/>
-            If you're in range of your distance and towards to your home heating kicks in. If you don't specify any scheduler or presence detector heating also is enabled if you arrived.<br/>
-
-            **Note**: If *on way home* is detected this gets handled like presence is on or somebody is home. So this has to match with the states of your schedulers if you use them.
-          default: ""
-          selector:
-            device:
-              filter:
-                integration: proximity
-              multiple: false
-
-        input_proximity_duration:
-          name: ⏰ Proximity Duration
-          description: >
-            `proximity`
-
-
-            Duration for which someone must be on way home before heating occurs.
-          default:
-            hours: 0
-            minutes: 2
-            seconds: 0
-          selector:
-            duration:
-
-        input_proximity_distance:
-          name: ↔️ Proximity Distance
-          description: >
-            `proximity`
-
-
-            The distance when proximity sensor gets impact for this automation. Hint: Unit depends on the setup of your integration.
-          default: 500
-          selector:
-            number:
-              min: 0
-              max: 999999999
-              step: 1
-              mode: box
 
     # W I N D O W   O P E N   D E T E C T I O N
     window_section:
@@ -1429,7 +1429,7 @@ trigger:
     value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'off') }}"
     for: !input input_action_call_delay
 
-  # P R O X I M I T Y
+  # proximity
   - trigger: template
     id: temperature_change_person_proximity_on
     value_template: >
@@ -1504,8 +1504,7 @@ trigger:
         {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
         {{ states(input_mode_winter) == activation_state }}
       {% endif %}
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   - trigger: template
     id: temperature_change_winter_mode_off
@@ -1514,8 +1513,7 @@ trigger:
         {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
         {{ states(input_mode_winter) != activation_state }}
       {% endif %}
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   # O U T S I D E   T E M P E R A T U R E
   - trigger: template
@@ -1543,8 +1541,7 @@ trigger:
       {% endif %}
 
       {{ (input_temperature_sensor != none and is_mode_room_temperature) and room_state and outside_state }}
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   - trigger: template
     id: temperature_change_outside_off
@@ -1571,8 +1568,7 @@ trigger:
       {% endif %}
 
       {{ (input_temperature_sensor != none and is_mode_room_temperature) and (not room_state or not outside_state) }}
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   # M O D E   -   M A I N T A N A C E
   - trigger: template
@@ -1584,21 +1580,18 @@ trigger:
   - trigger: template
     id: temperature_change_force_max_temperature_off
     value_template: "{{ input_force_max_temperature != none and is_state(input_force_max_temperature, 'off') }}"
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   # M O D E   -   P A R T Y
   - trigger: template
     id: temperature_change_party_on
     value_template: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | list | count > 0 }}"
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   - trigger: template
     value_template: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | list | count == 0 }}"
     id: temperature_change_party_off
-    for:
-      seconds: 2
+    for: !input input_action_call_delay
 
   # E X T E R N A L  C A L I B R A T I O N   S E N S O R
   - trigger: template
@@ -1867,6 +1860,8 @@ variables:
 
     {{ selected_scheduler }}
 
+  state_scheduler: "{{ active_scheduler != none and is_state(active_scheduler,'on') }}"
+
   # presence
   is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
   is_presence_scheduler_defined: "{{ input_scheduler_presence != none }}"
@@ -1894,12 +1889,14 @@ variables:
     {{ iif(is_presence_sensor_defined, state_presence_scheduler and state_presence_sensor, state_presence_sensor) }}
 
   # proximity
+  is_proximity_defined: "{{ input_proximity != none }}"
+
   state_proximity_arrived: >
     {% set proximity_entities = device_entities(input_proximity) %}
     {% set is_arrived = proximity_entities  | expand 
-                                        | selectattr('attributes.device_class', 'eq', 'enum') 
-                                        | map(attribute='entity_id') | select('is_state','arrived') 
-                                        | list | count > 0 %}
+        | selectattr('attributes.device_class', 'eq', 'enum') 
+        | map(attribute='entity_id') | select('is_state','arrived') 
+        | list | count > 0 %}
     {{ is_arrived }}
 
   state_proximity_way_home: >
@@ -1913,22 +1910,49 @@ variables:
     {% endif %}
 
     {% set entities_towards = proximity_entities  | expand 
-                                            | selectattr('attributes.device_class', 'eq', 'enum') 
-                                            | selectattr('last_changed', '<=', earliest_timestamp)
-                                            | map(attribute='entity_id') | select('is_state','towards')
-                                            | map('regex_replace','_(?=[^_]*$)(.*)', '')
-                                            | list %}
+        | selectattr('attributes.device_class', 'eq', 'enum') 
+        | selectattr('last_changed', '<=', earliest_timestamp)
+        | map(attribute='entity_id') | select('is_state','towards')
+        | map('regex_replace','_(?=[^_]*$)(.*)', '')
+        | list %}
 
     {% set entities_distances = proximity_entities  | expand 
-                                            | selectattr('attributes.device_class', 'eq', 'distance')
-                                            | selectattr('state', '<', input_proximity_distance | string)
-                                            | map(attribute='entity_id')
-                                            | map('regex_replace','_(?=[^_]*$)(.*)', '')
-                                            | list %}
+        | selectattr('attributes.device_class', 'eq', 'distance')
+        | selectattr('state', '<', input_proximity_distance | string)
+        | map(attribute='entity_id')
+        | map('regex_replace','_(?=[^_]*$)(.*)', '')
+        | list %}
 
     {% set towards_and_in_distance = entities_towards | select('in', entities_distances) | list | count > 0 %}
 
     {{ towards_and_in_distance }}
+
+  # force max temperature
+  is_force_max_temperature: "{{ input_force_max_temperature != none and is_state(input_force_max_temperature, 'on') }}"
+
+  # party
+  active_party_entity: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | map(attribute='entity_id') | first | default(none) }}"
+  state_mode_party: "{{ active_party_entity != none }}"
+  party_temp: >
+    {% set pos_party_temp = none %}
+    {% if state_mode_party == true %}
+      {% set name = state_attr(active_party_entity,'friendly_name') %}
+      {% set pos_temp = name.split(' ') | last %}
+      {% if is_number(pos_temp) %}
+        {% set pos_party_temp = pos_temp | float %}
+      {% endif %}
+    {% endif %}
+    {{ pos_party_temp }}
+
+  # away
+  is_away: >
+    {% if is_person_defined and not is_anybody_home %}
+      {{ (is_scheduler_away_mode and state_scheduler) or (is_presence_away_mode and state_presence_scheduler and not state_presence) }}
+    {% elif presence_ignor_people and is_presence_away_mode %}
+      {{ state_presence_scheduler and not state_presence }}
+    {% else %}
+      {{ false }}
+    {% endif %}
 
   # thermostat groups
   valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
@@ -1939,20 +1963,29 @@ variables:
   # global
   factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
   no_changes: "{{ input_persons | count == 0 and input_mode_guest == none and input_schedulers | count == 0 and input_presence_sensor == none and input_proximity == none }}"
+  winter_mode: "{{ true }}"
+  set_comfort: "{{ false }}"
 
 conditions: []
 
 actions:
   - event: ahc_event
     event_data:
+      state: "{{ winter_mode }}"
+      mode: "{{ iif(set_comfort == true, 'comfort', 'eco') }}"
       automation: "{{ this.entity_id }}"
       is_anybody_home: "{{ is_anybody_home }}"
       is_guest_mode: "{{ is_guest_mode }}"
       active_scheduler: "{{ active_scheduler }}"
+      state_scheduler: "{{ state_scheduler }}"
       state_presence_sensor: "{{ state_presence_sensor }}"
       state_presence_scheduler: "{{ state_presence_scheduler }}"
       state_presence: "{{ state_presence }}"
       state_proximity_arrived: "{{ state_proximity_arrived }}"
       state_proximity_way_home: "{{ state_proximity_way_home }}"
+      is_force_max_temperature: "{{ is_force_max_temperature }}"
+      active_party_entity: "{{ active_party_entity }}"
+      party_temp: "{{ party_temp }}"
+      is_away: "{{ is_away }}"
 
 mode: queued

@@ -1,5 +1,13 @@
 {
   "files.associations": {
     "*.yaml": "home-assistant"
+  },
+  "[jinja-yaml]": {
+    "editor.quickSuggestions": {
+        "other": true,
+        "comments": true,
+        "strings": true
+    },
+    "editor.snippetSuggestions": "inline"
   }
 }
