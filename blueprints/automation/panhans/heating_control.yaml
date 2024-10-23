@@ -1198,11 +1198,12 @@ blueprint:
                 - error
                 - debug
 
-##################################################
-############### T R I G G E R ####################
-##################################################
-
 trigger_variables:
+  # thermostats / sensors
+  input_trvs: !input input_trvs
+  input_temperature_sensor: !input input_temperature_sensor
+  is_temperature_sensor_defined: "{{ input_temperature_sensor != none }}"
+
   # uptime
   uptime_sensor: "{{ integration_entities('uptime') | first | default(none) }}"
   is_uptime_defined: "{{ uptime_sensor != none }}"
@@ -1217,89 +1218,58 @@ trigger_variables:
   is_person_defined: "{{ input_person_count > 0 }}"
   is_guest_mode_defined: "{{ input_mode_guest != none }}"
 
-  # M O D E S
-  input_mode_winter: !input input_mode_winter
-  input_mode_party: !input input_mode_party
-  input_force_max_temperature: !input input_force_max_temperature
-  input_hvac_mode: !input input_hvac_mode
-
-  input_temperature_comfort: !input input_temperature_comfort
-  input_temperature_minimum: !input input_temperature_minimum
-  input_time_based_temperature_change_valve_target: !input input_time_based_temperature_change_valve_target
-
-  # S C H E D U L E R
+  # scheduler
   input_schedulers: !input input_schedulers
   input_scheduler_selector: !input input_scheduler_selector
   input_scheduler_presence: !input input_scheduler_presence
 
-  # A D D I T I O N A L   S E T T I N G S
-  input_trvs: !input input_trvs
-  input_windows: !input input_windows
-  input_temperature_sensor: !input input_temperature_sensor
-  input_presence_sensor: !input input_presence_sensor
-  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
-  input_calibration_timeout: !input input_calibration_timeout
-
-  input_proximity: !input input_proximity
-  input_proximity_duration: !input input_proximity_duration
-  input_proximity_distance: !input input_proximity_distance
-
-  # MODE ON / OFF
+  # temperatures
+  input_temperature_comfort: !input input_temperature_comfort
+  input_temperature_minimum: !input input_temperature_minimum
+  input_hvac_mode: !input input_hvac_mode
+  factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
+  is_heat_only_if_below_real_temp: !input input_off_if_above_room_temperature
+  
+  # on/ff
+  input_mode_winter: !input input_mode_winter
   input_mode_outside_temperature: !input input_mode_outside_temperature
   input_mode_outside_temperature_threshold: !input input_mode_outside_temperature_threshold
   input_mode_room_temperature_threshold: !input input_mode_room_temperature_threshold
   input_mode_room_temperature: !input input_mode_room_temperature
-
-  input_frost_protection_duration: !input input_frost_protection_duration
-
-  is_heat_only_if_below_real_temp: !input input_off_if_above_room_temperature
-
-  factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
-
   input_invert_winter_mode_value: !input input_invert_winter_mode_value
 
-  # L I M I N G  P R O T E C T I O N
+  # party / force max
+  input_mode_party: !input input_mode_party
+  input_force_max_temperature: !input input_force_max_temperature
+
+  # adjustments / heating plan
+  input_time_based_temperature_change_valve_target: !input input_time_based_temperature_change_valve_target
+
+  # calibration
+  input_calibration_timeout: !input input_calibration_timeout
+
+  # windows
+  input_windows: !input input_windows
+
+  #presence
+  input_presence_sensor: !input input_presence_sensor
+  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
+
+  # proximity
+  input_proximity: !input input_proximity
+  input_proximity_duration: !input input_proximity_duration
+  input_proximity_distance: !input input_proximity_distance
+
+  # frost protection
+  input_frost_protection_duration: !input input_frost_protection_duration
+
+  # liming protection
   input_liming_protection: !input input_liming_protection
   input_liming_protection_day: !input input_liming_protection_day
   input_liming_protection_time: !input input_liming_protection_time
   input_liming_in_winter: !input input_liming_in_winter
 
 trigger:
-  # LIMING PROTECTION
-  - trigger: template
-    value_template: >
-      {% if not input_liming_protection%}
-        {{ false }}
-      {% else %}
-        {% set enable_liming = true %}
-        {% if input_mode_winter != none %}
-          {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
-        {% endif %}
-
-        {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
-        {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
-
-        {{ enable_liming and is_liming_day and is_liming_time }}
-      {% endif %}
-    id: temperature_change_liming_protection_on
-
-  - trigger: template
-    value_template: >
-      {% if not input_liming_protection%}
-        {{ false }}
-      {% else %}
-        {% set enable_liming = true %}
-        {% if input_mode_winter != none %}
-          {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
-        {% endif %}
-
-        {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
-        {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
-
-        {{ not (enable_liming and is_liming_day and is_liming_time) }}
-      {% endif %}
-    id: temperature_change_liming_protection_off
-
   # system
   - trigger: homeassistant
     event: start
@@ -1309,7 +1279,7 @@ trigger:
     event_type: automation_reloaded
     id: temperature_change_reload
 
-  # S T A T E   T R I G G E R S
+  # physical change
   - trigger: state
     entity_id: !input input_trvs
     attribute: temperature
@@ -1317,11 +1287,11 @@ trigger:
       seconds: 5
     id: temperature_change_valve_target
 
-  # T E M P E R A T U R E   C H A N G E S
+  # eco/comfort change
   - trigger: template
     value_template: >
       {% if input_temperature_minimum != none %}
-        {{ now() - states.input_number[input_temperature_minimum.split('.')[1]].last_updated >= timedelta(seconds=2) }}
+        {{ now() - states.input_number[input_temperature_minimum.split('.')[1]].last_updated >= timedelta(**input_action_call_delay) }}
       {% else %}
         {{ false }}
       {% endif %}
@@ -1330,7 +1300,7 @@ trigger:
   - trigger: template
     value_template: >
       {% if input_temperature_comfort != none %}
-        {{ now() - states.input_number[input_temperature_comfort.split('.')[1]].last_updated >= timedelta(seconds=2) }}
+        {{ now() - states.input_number[input_temperature_comfort.split('.')[1]].last_updated >= timedelta(**input_action_call_delay) }}
       {% else %}
         {{ false }}
       {% endif %}
@@ -1621,27 +1591,28 @@ trigger:
     id: temperature_change_party_off
     for: !input input_action_call_delay
 
-  # E X T E R N A L  C A L I B R A T I O N   S E N S O R
-  - trigger: template
-    id: calibration_sensor_change
-    value_template: >
-      {% if input_temperature_sensor != none %}
-        {{ (now() - states.sensor[input_temperature_sensor.split('.')[1]].last_updated) >= timedelta(hours=input_calibration_timeout.hours, minutes=input_calibration_timeout.minutes, seconds=input_calibration_timeout.seconds) }}
-      {% else %}
-        {{ false }}
-      {% endif %}
-
+  # aggressive mode
   - trigger: state
     id: calibration_aggressive_mode_thermostat_change
     entity_id: !input input_trvs
     attribute: current_temperature
     for: !input input_calibration_timeout
 
+  # calibration trigger
+  - trigger: template
+    id: calibration_sensor_change
+    value_template: >
+      {% if is_temperature_sensor_defined %}
+        {{ (now() - states.sensor[input_temperature_sensor.split('.')[1]].last_updated) >= timedelta(**input_calibration_timeout) }}
+      {% else %}
+        {{ false }}
+      {% endif %}
+
   - trigger: template
     id: calibration_popp_change
     value_template: >
-      {% if input_temperature_sensor != none %}
-        {{ (now() - states.sensor[input_temperature_sensor.split('.')[1]].last_updated) >= timedelta(hours=0, minutes=0, seconds=2) }}
+      {% if is_temperature_sensor_defined %}
+        {{ (now() - states.sensor[input_temperature_sensor.split('.')[1]].last_updated) >= timedelta(seconds=2) }}
       {% else %}
         {{ false }}
       {% endif %}
@@ -1653,18 +1624,49 @@ trigger:
       {% set has_valves_popp = input_trvs | select('is_device_attr', 'manufacturer', 'Popp') | list %}
       {% set valves_hive = input_trvs | select('is_device_attr', 'manufacturer', 'Hive') | list %}
 
-      {% set all_valves = has_valves_danfoss + has_valves_popp + valves_hive %}
+      {% set has_valves = (has_valves_danfoss + has_valves_popp + valves_hive) | count > 0 %}
 
-      {% if all_valves | count == 0 or input_temperature_sensor == none %}
-        {{ false }}
-      {% else %}
-        {{ now().strftime('%M') | int % 10 == 0 }}
-      {% endif %}
+      {{ has_valves and is_temperature_sensor_defined and now().strftime('%M') | int % 10 == 0 }}
 
-  # C O M F O R T   T E M P   C H A N G E   B Y   T I M E
+  # heating adjustments
   - trigger: template
     id: temperature_change_heating_adjustment
     value_template: "{{ now().strftime('%H:%M') in (input_time_based_temperature_change_valve_target | map(attribute='time') | list) }}"
+
+  # liming protection
+  - trigger: template
+    value_template: >
+      {% if not input_liming_protection%}
+        {{ false }}
+      {% else %}
+        {% set enable_liming = true %}
+        {% if input_mode_winter != none %}
+          {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
+        {% endif %}
+
+        {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
+        {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
+
+        {{ enable_liming and is_liming_day and is_liming_time }}
+      {% endif %}
+    id: temperature_change_liming_protection_on
+
+  - trigger: template
+    value_template: >
+      {% if not input_liming_protection%}
+        {{ false }}
+      {% else %}
+        {% set enable_liming = true %}
+        {% if input_mode_winter != none %}
+          {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
+        {% endif %}
+
+        {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
+        {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
+
+        {{ not (enable_liming and is_liming_day and is_liming_time) }}
+      {% endif %}
+    id: temperature_change_liming_protection_off
 
   # frost protection
   - trigger: template
@@ -1697,19 +1699,19 @@ trigger:
         {% endif %}
       {% endif %}
 
-  # HEATING / COOLING WHEN ABOVE/BELOW ROOM TEMPERATURE
+  # above/below temperature trigger
   - trigger: template
     id: temperature_change_room_temp_above_target
     value_template: >
-      {% if input_temperature_sensor != none and is_heat_only_if_below_real_temp == true %}
-        {{ (now() - states.sensor[input_temperature_sensor.split('.')[1]].last_updated) >= timedelta(hours=0, minutes=0, seconds=2) }}
+      {% if is_temperature_sensor_defined and is_heat_only_if_below_real_temp %}
+        {{ (now() - states.sensor[input_temperature_sensor.split('.')[1]].last_updated) >= timedelta(**input_calibration_timeout) }}
       {% else %}
         {{ false }}
       {% endif %}
 
 variables:
   #####################################################################################
-  #################################### INPUTS #####################################
+  ###################################### INPUTS #######################################
   #####################################################################################
 
   # thermostats / sensors
