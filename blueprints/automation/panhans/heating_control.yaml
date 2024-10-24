@@ -1631,7 +1631,23 @@ trigger:
   # heating adjustments
   - trigger: template
     id: temperature_change_heating_adjustment
-    value_template: "{{ now().strftime('%H:%M') in (input_time_based_temperature_change_valve_target | map(attribute='time') | list) }}"
+    value_template: >
+      {% set timestamp = now() %}
+
+      {% set current_day = timestamp.strftime('%a') %}
+      {% set current_time = timestamp.strftime('%H:%M') %}
+
+      {% set plan = input_time_based_temperature_change_valve_target | rejectattr('time', 'undefined') 
+          | selectattr('time','eq', current_time | string)
+          | sort(attribute='time', reverse = true)
+          | list  %}
+
+      {% set latest_entry = plan | selectattr('days', 'undefined') | selectattr('scheduler', 'undefined') | first %}
+      {% set latest_entry_day = plan | rejectattr('days', 'undefined') | selectattr('days', 'search', current_day) | first %}
+
+      {% set item = [latest_entry,latest_entry_day] | reject ('undefined') | list | last | default(none) %}
+
+      {{ item != none and now() < now().replace(second=2) }}
 
   # liming protection
   - trigger: template
@@ -1807,6 +1823,9 @@ variables:
   #####################################################################################
   #################################### EVALUATION #####################################
   #####################################################################################
+
+  # global
+  factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
 
   # uptime
   up_time_sensor: "{{ integration_entities('uptime') | first | default(none) }}"
@@ -2091,19 +2110,127 @@ variables:
     {% endif %}
 
   # thermostat groups
-  valves: "{{ expand(input_trvs) | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) | map(attribute='entity_id') | list }}"
-  valves_unsupported: "{{ input_trvs | reject('in',valves) | list }}"
-  valves_off_mode: "{{ valves | expand | selectattr('attributes.hvac_modes','search','(?i)off') | map(attribute='entity_id') | list }}"
-  valves_without_off_mode: "{{ valves | reject('in',valves_off_mode) | list }}"
+  valves: >
+    {{ input_trvs | expand
+        | selectattr('attributes.hvac_modes','search','(?i)'+input_hvac_mode) 
+        | map(attribute='entity_id') 
+        | list }}
+
+  valves_unsupported: >
+    {{ input_trvs | reject('in',valves) | list }}
+
+  valves_off_mode: >
+    {{ valves | expand | selectattr('attributes.hvac_modes','search','(?i)off') 
+        | map(attribute='entity_id') 
+        | list }}
+
+  valves_without_off_mode: > 
+    {{ valves | reject('in',valves_off_mode) | list }}
 
   # global
-  factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
   no_changes: "{{ input_persons | count == 0 and input_mode_guest == none and input_schedulers | count == 0 and input_presence_sensor == none and input_proximity == none }}"
   set_comfort: "{{ false }}"
+
+  #####################################################################################
+  ################################## ADJUSTMENTS ######################################
+  #####################################################################################
+
+  latest_entry_today: >
+    {% set timestamp = now() %}
+
+    {% set scheduler_name = none %}
+    {% if active_scheduler != none %}
+      {% set scheduler_name = state_attr(active_scheduler,'friendly_name') %}
+    {% endif %}
+
+    {% set current_day = timestamp.strftime('%a') %}
+    {% set current_time = timestamp.strftime('%H:%M') %}
+
+    {% set plan = input_time_based_temperature_change_valve_target | rejectattr('time', 'undefined') 
+        | selectattr('time','<=', current_time| string)
+        | sort(attribute='time', reverse = true)
+        | list  %}
+
+    {% set latest_entry = plan | selectattr('days', 'undefined') | selectattr('scheduler', 'undefined') | first %}
+    {% set latest_entry_scheduler = plan | selectattr('days', 'undefined') | rejectattr('scheduler', 'undefined') | selectattr('scheduler','eq', scheduler_name) | first %}
+    {% set latest_entry_day = plan | rejectattr('days', 'undefined') | selectattr('days', 'search', current_day) | first %}
+    {% set latest_entry_day_scheduler = plan | rejectattr('days', 'undefined') | selectattr('days', 'search', current_day) | rejectattr('scheduler', 'undefined') | selectattr('scheduler','eq', scheduler_name) | first %}
+
+    {% set relevant_entries = [latest_entry,latest_entry_scheduler,latest_entry_day,latest_entry_day_scheduler] | reject ('undefined') | list %}
+    {% set latest_time = relevant_entries | sort(attribute='time', reverse = true) | map(attribute='time') | first %}
+    {% set relevant_entries_filtered_by_time = relevant_entries | selectattr('time', 'eq', latest_time) | list %}
+    {% set item = relevant_entries_filtered_by_time | last | default(none) %}
+
+    {{ item }}
+
+  latest_entry_day_before: >
+    {% set timestamp = now().replace(hour=23,minute=59) + timedelta(days=-1) %}
+
+    {% set scheduler_name = none %}
+    {% if active_scheduler != none %}
+      {% set scheduler_name = state_attr(active_scheduler,'friendly_name') %}
+    {% endif %}
+
+    {% set current_day = timestamp.strftime('%a') %}
+    {% set current_time = timestamp.strftime('%H:%M') %}
+
+    {% set plan = input_time_based_temperature_change_valve_target | rejectattr('time', 'undefined') 
+        | selectattr('time','<=', current_time| string)
+        | sort(attribute='time', reverse = true)
+        | list  %}
+
+    {% set latest_entry = plan | selectattr('days', 'undefined') | selectattr('scheduler', 'undefined') | first %}
+    {% set latest_entry_scheduler = plan | selectattr('days', 'undefined') | rejectattr('scheduler', 'undefined') | selectattr('scheduler','eq', scheduler_name) | first %}
+    {% set latest_entry_day = plan | rejectattr('days', 'undefined') | selectattr('days', 'search', current_day) | first %}
+    {% set latest_entry_day_scheduler = plan | rejectattr('days', 'undefined') | selectattr('days', 'search', current_day) | rejectattr('scheduler', 'undefined') | selectattr('scheduler','eq', scheduler_name) | first %}
+
+    {% set relevant_entries = [latest_entry,latest_entry_scheduler,latest_entry_day,latest_entry_day_scheduler] | reject ('undefined') | list %}
+    {% set latest_time = relevant_entries | sort(attribute='time', reverse = true) | map(attribute='time') | first %}
+    {% set relevant_entries_filtered_by_time = relevant_entries | selectattr('time', 'eq', latest_time) | list %}
+    {% set item = relevant_entries_filtered_by_time | last | default(none) %}
+
+    {{ item }}
+
+  entry: "{{ iif(latest_entry_today != none, latest_entry_today, latest_entry_day_before) }}"
+
+  entry_time: >
+    {% if entry != none  %}
+      {% set entry_hour = entry['time'].split(':')[0] | int %}
+      {% set entry_minute = entry['time'].split(':')[1] | int %}
+      {{ now().replace(hour=entry_hour, minute=entry_minute, second=0, microsecond=0) }}
+    {% endif %}
+
+  entry_comfort_temp: >
+    {% if entry != none and 'comfort' in entry.keys() %}
+      {{ entry['comfort'] }}
+    {% else %}
+      {{ none }}
+    {% endif %}
+
+  entry_eco_temp: >
+    {% if entry != none and 'eco' in entry.keys() %}
+      {{ entry['eco'] }}
+    {% else %}
+      {{ none }}
+    {% endif %}
+
+  entry_calibration: >
+    {% if entry != none and 'calibration' in entry.keys() %}
+      {{ entry['calibration'] == 'on' }}
+    {% else %}
+      {{ true }}
+    {% endif %}
 
 conditions: []
 
 actions:
+  - action: system_log.write
+    data:
+      level: warning
+      logger: blueprints.panhans.heatingcontrol
+      message: >
+        {{ input_time_based_temperature_change_valve_target }}
+
   - event: ahc_event
     event_data:
       state: "{{ state_ahc }}"
@@ -2127,5 +2254,6 @@ actions:
       is_frost_protection: "{{ is_frost_protection }}"
       is_liming_protection: "{{ is_liming_protection }}"
       state_outside_temp: "{{ state_outside_temp }}"
+      entry_time: "{{ entry_time }}"
 
 mode: queued
