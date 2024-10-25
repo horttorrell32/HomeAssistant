@@ -141,7 +141,7 @@ blueprint:
               mode: box
               unit_of_measurement: °C / °F
 
-        input_temperature_minimum_static:
+        input_temperature_eco_static:
           name: 🌱 Static Eco Temperature
           description: >
             `eco temperature`
@@ -175,7 +175,7 @@ blueprint:
                     - input_number
               multiple: false
 
-        input_temperature_minimum:
+        input_temperature_eco:
           name: 🌱 Eco Temperature
           description: >
             `eco temperature` `optional`
@@ -1225,7 +1225,7 @@ trigger_variables:
 
   # temperatures
   input_temperature_comfort: !input input_temperature_comfort
-  input_temperature_minimum: !input input_temperature_minimum
+  input_temperature_eco: !input input_temperature_eco
   input_hvac_mode: !input input_hvac_mode
   factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
   is_heat_only_if_below_real_temp: !input input_off_if_above_room_temperature
@@ -1290,8 +1290,8 @@ trigger:
   # eco/comfort change
   - trigger: template
     value_template: >
-      {% if input_temperature_minimum != none %}
-        {{ now() - states.input_number[input_temperature_minimum.split('.')[1]].last_updated >= timedelta(**input_action_call_delay) }}
+      {% if input_temperature_eco != none %}
+        {{ now() - states.input_number[input_temperature_eco.split('.')[1]].last_updated >= timedelta(**input_action_call_delay) }}
       {% else %}
         {{ false }}
       {% endif %}
@@ -1738,8 +1738,8 @@ variables:
   # temperatures
   input_temperature_comfort: !input input_temperature_comfort
   input_temperature_comfort_static: !input input_temperature_comfort_static
-  input_temperature_minimum: !input input_temperature_minimum
-  input_temperature_minimum_static: !input input_temperature_minimum_static
+  input_temperature_eco: !input input_temperature_eco
+  input_temperature_eco_static: !input input_temperature_eco_static
 
   #frost protection
   input_frost_protection_temp: !input input_frost_protection_temp
@@ -1791,7 +1791,7 @@ variables:
 
   # calibration
   input_calibration_delta: !input input_calibration_delta
-  is_generic_calibration: !input input_calibration_generic
+  input_calibration_generic: !input input_calibration_generic
   is_rounded_values: !input input_calibration_rounded_values
   
   # Aggressive Mode
@@ -1826,6 +1826,8 @@ variables:
 
   # global
   factor: "{{ iif(input_hvac_mode == 'cool', -1, 1) | int }}"
+  current_time_stamp: "{{ now() }}"
+  is_metric: "{{ input_temperature_sensor == none or (input_temperature_sensor != none and state_attr(input_temperature_sensor,VAR_UNIT_OF_MEASUREMENT) == '°C') }}"
 
   # uptime
   up_time_sensor: "{{ integration_entities('uptime') | first | default(none) }}"
@@ -1834,7 +1836,7 @@ variables:
     {% if is_uptime_defined %}
       {{ states(up_time_sensor) | as_datetime }}
     {% else %}
-      {{ now() }}
+      {{ current_time_stamp | as_datetime }}
     {% endif %}
 
   # on/off
@@ -1882,8 +1884,8 @@ variables:
     {% elif not is_person_defined %}
       {{ false }}
     {% else %}
-      {% set on_time_delta = now() - timedelta(**input_people_entering_home_duration) %}
-      {% set off_time_delta = now() - timedelta(**input_people_leaving_home_duration) %}
+      {% set on_time_delta = current_time_stamp | as_datetime - timedelta(**input_people_entering_home_duration) %}
+      {% set off_time_delta = current_time_stamp | as_datetime - timedelta(**input_people_leaving_home_duration) %}
 
       {% set uptime_on = as_datetime(uptime) + timedelta(**input_people_entering_home_duration) %}
       {% set uptime_off = as_datetime(uptime) + timedelta(**input_people_leaving_home_duration) %}
@@ -1955,11 +1957,12 @@ variables:
       {% set sensor_state = is_state(input_presence_sensor, 'on') %}
       {% set reaction_time = iif(sensor_state, input_presence_reaction_on_time, input_presence_reaction_off_time) %}
       {% set min_timestamp = last_changed + timedelta(**reaction_time) %}
+      {% set current_ts = current_time_stamp | as_datetime%}
 
-      {% if is_uptime_defined and as_datetime(uptime) + timedelta(**reaction_time) > now() - timedelta(**reaction_time) %}
+      {% if is_uptime_defined and as_datetime(uptime) + timedelta(**reaction_time) > current_ts - timedelta(**reaction_time) %}
         {{ sensor_state }}
       {% else %}
-        {% set is_limit = min_timestamp <= now() %}
+        {% set is_limit = min_timestamp <= current_ts %}
 
         {{ (sensor_state == true and is_limit) or (sensor_state == false and not is_limit) }}
       {% endif %}
@@ -1983,7 +1986,7 @@ variables:
   state_proximity_way_home: >
     {% set proximity_entities = device_entities(input_proximity) %}
 
-    {% set earliest_timestamp = now() - timedelta(**input_proximity_duration) %}
+    {% set earliest_timestamp = current_time_stamp | as_datetime - timedelta(**input_proximity_duration) %}
     {% set uptime_duration = as_datetime(uptime) + timedelta(**input_proximity_duration) %}
 
     {% if uptime_duration > earliest_timestamp %}
@@ -2039,8 +2042,9 @@ variables:
 
   # windows & doors
   state_window: >
-    {% set on_time_delta = now() - timedelta(**input_windows_reaction_time_open) %}
-    {% set off_time_delta = now() - timedelta(**input_windows_reaction_time_close) %}
+    {% set current_ts = current_time_stamp | as_datetime %}
+    {% set on_time_delta = current_ts - timedelta(**input_windows_reaction_time_open) %}
+    {% set off_time_delta = current_ts - timedelta(**input_windows_reaction_time_close) %}
 
     {% set has_open_windows = input_windows 
         | expand
@@ -2063,9 +2067,8 @@ variables:
 
   # frost protection
   is_frost_protection: >
-    {% set now_ts = now() %}
-    {% set frost_protection_timestamp = as_datetime(now_ts) - timedelta(**input_frost_protection_duration) %}
-    {% if frost_protection_timestamp == as_datetime(now_ts) %}
+    {% set frost_protection_timestamp = as_datetime(current_time_stamp) - timedelta(**input_frost_protection_duration) %}
+    {% if frost_protection_timestamp == as_datetime(current_time_stamp) %}
       {{ false }}
     {% else %}
       {% set is_presence_fp = [input_presence_sensor] 
@@ -2103,8 +2106,10 @@ variables:
         {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
       {% endif %}
 
-      {% set is_liming_day = input_liming_protection_day == now().strftime('%a') %}
-      {% set is_liming_time = input_liming_protection_time[:-3] in now() | string %}
+      {% set current_ts = current_time_stamp | as_datetime %}
+
+      {% set is_liming_day = input_liming_protection_day == current_ts.strftime('%a') %}
+      {% set is_liming_time = input_liming_protection_time[:-3] in current_time_stamp %}
 
       {{ enable_liming and is_liming_day and is_liming_time }}
     {% endif %}
@@ -2136,15 +2141,15 @@ variables:
   #####################################################################################
 
   latest_entry_today: >
-    {% set timestamp = now() %}
-
     {% set scheduler_name = none %}
     {% if active_scheduler != none %}
       {% set scheduler_name = state_attr(active_scheduler,'friendly_name') %}
     {% endif %}
 
-    {% set current_day = timestamp.strftime('%a') %}
-    {% set current_time = timestamp.strftime('%H:%M') %}
+    {% set current_ts = current_time_stamp | as_datetime %}
+
+    {% set current_day = current_ts.strftime('%a') %}
+    {% set current_time = current_ts.strftime('%H:%M') %}
 
     {% set plan = input_time_based_temperature_change_valve_target | rejectattr('time', 'undefined') 
         | selectattr('time','<=', current_time| string)
@@ -2164,7 +2169,7 @@ variables:
     {{ item }}
 
   latest_entry_day_before: >
-    {% set timestamp = now().replace(hour=23,minute=59) + timedelta(days=-1) %}
+    {% set timestamp = as_datetime(current_time_stamp).replace(hour=23,minute=59) + timedelta(days=-1) %}
 
     {% set scheduler_name = none %}
     {% if active_scheduler != none %}
@@ -2197,7 +2202,7 @@ variables:
     {% if entry != none  %}
       {% set entry_hour = entry['time'].split(':')[0] | int %}
       {% set entry_minute = entry['time'].split(':')[1] | int %}
-      {{ now().replace(hour=entry_hour, minute=entry_minute, second=0, microsecond=0) }}
+      {{ as_datetime(current_time_stamp).replace(hour=entry_hour, minute=entry_minute, second=0, microsecond=0) }}
     {% endif %}
 
   entry_comfort_temp: >
@@ -2219,6 +2224,296 @@ variables:
       {{ entry['calibration'] == 'on' }}
     {% else %}
       {{ true }}
+    {% endif %}
+
+  #####################################################################################
+  ############################### TRIGGER EVALUATION ##################################
+  #####################################################################################
+
+  is_temperature_change_trigger: "{{ true }}"
+
+  # calibration
+  is_calibration_trigger: "{{ true }}"
+
+  is_generic_calibration_trigger: "{{ is_calibration_trigger or is_temperature_change_trigger }}"
+
+  is_calibration_popp_periodical_trigger: >
+    {{ trigger.id in ['calibration_popp_ping','hastart','reload'] }}
+
+  is_calibration_difference_popp_trigger: >
+    {{ trigger.id in ['calibration_popp_change'] }}
+
+  #####################################################################################
+  ################################## CALIBRATION ######################################
+  #####################################################################################
+
+  is_native_calibration: "{{ is_calibration_trigger and not input_calibration_generic and entry_calibration and is_temperature_sensor_defined }}"
+  is_generic_calibration: "{{ is_generic_calibration_trigger and input_calibration_generic and entry_calibration and is_temperature_sensor_defined }}"
+
+  value_temperature_sensor: >
+    {% if is_temperature_sensor_defined %}
+      {{ states(input_temperature_sensor) | float(0)  }}
+    {% else %}
+      {{ float(0) }}
+    {% endif %}
+
+  rounding: "{{ iif(is_rounded_values, 0, 2) | int }}"
+
+  # TADO
+  valves_tado: "{{ valves | select('is_device_attr', 'manufacturer', 'Tado') | list }}"
+  calibration_tado: >
+    {% set n = namespace(dict=[]) %}
+
+    {% if is_native_calibration %}
+      {% for valve in valves_tado %}
+
+        {% set offset_old = state_attr(valve, iif(is_metric, 'offset_celsius', 'offset_fahrenheit')) | float(0) %}
+        {% set local_temperature = state_attr(valve, 'current_temperature') | float %}
+        {% set calibration_sensor_temperature = value_temperature_sensor | float %}
+
+        {% set offset = float(calibration_sensor_temperature) - float(local_temperature) %}
+        {% set offset_new = (float(offset) + float(offset_old)) | round(rounding | int) %}
+
+        {% if (float(offset_old) - float(offset_new)) | abs >= float(input_calibration_delta) %}
+          {% set n.dict = n.dict + [(valve, [{'value': offset_new}])] %}
+        {% endif %}
+
+      {% endfor %}
+    {% endif %}
+
+    {{ dict.from_keys(n.dict) }}
+
+  # XIAOMI / AQARA
+  valves_xiaomi_xiaomi: "{{ valves | select('is_device_attr', 'manufacturer', 'Xiaomi') | list }}"
+  valves_xiaomi_aqara: "{{ valves | select('is_device_attr', 'manufacturer', 'Aqara') | list }}"
+  valves_xiaomi: "{{ valves_xiaomi_xiaomi + valves_xiaomi_aqara }}"
+  calibration_xiaomi: >
+    {% set n = namespace(dict=[]) %}
+
+    {% if is_native_calibration %}
+      {% for valve in valves_xiaomi %}
+
+        {% set calibration_entities = device_entities(device_id(valve)) |
+                                    expand | selectattr('domain','in','number') |
+                                    selectattr('entity_id', 'search', 'external') |
+                                    map(attribute='entity_id') | list %}
+
+        {% if calibration_entities | count > 0 %}
+
+          {% set calibration_entity = calibration_entities | first %}
+          {% set offset_old = states(calibration_entity) | float(0) %}
+          {% set offset_new = value_temperature_sensor | float %}
+
+          {% if (float(offset_old) - float(offset_new)) | abs >= float(input_calibration_delta) %}
+            {% set n.dict = n.dict + [(calibration_entity, [{'value': offset_new, 'valve': valve}])] %}
+          {% endif %}
+        {% endif %}
+
+      {% endfor %}
+    {% endif %}
+
+    {{ dict.from_keys(n.dict) }}
+
+  
+  # DANFOSS, POPP, HIVE
+  valves_danfoss: "{{ valves | select('is_device_attr', 'manufacturer', 'Danfoss') | list }}"
+  valves_popp: "{{ valves | select('is_device_attr', 'manufacturer', 'Popp') | list }}"
+  valves_hive: "{{ valves | select('is_device_attr', 'manufacturer', 'Hive') | list }}"
+  valves_dph: "{{ valves_danfoss + valves_popp + valves_hive }}"
+
+  is_periodical_popp_calibration: >
+    {{ trigger.id in ['calibration_popp_ping','hastart','reload'] }}
+
+  is_difference_popp_calibration: >
+    {{ trigger.id in ['calibration_popp_change'] }}
+
+  calibration_dph: >
+    {% set n = namespace(dict=[]) %}
+    {% if (is_calibration_popp_periodical_trigger or is_calibration_difference_popp_trigger) and is_native_calibration %}
+
+      {% for valve in valves_dph %}
+
+        {% set calibration_entity = device_entities(device_id(valve)) |
+                                    expand | selectattr('domain','in','number') |
+                                    selectattr('entity_id', 'search', 'external') |
+                                    map(attribute='entity_id') | first %}
+
+        {% set new_state = (value_temperature_sensor | float(0) * 100) | int %}
+        {% set old_state = states(calibration_entity) | int %}
+
+        {% set update_calibration = false %}
+
+        {% if is_periodical_popp_calibration %}
+          {% set last_updated = [calibration_entity] | expand | map(attribute='last_updated') | first %}
+          {% set update_calibration = as_datetime(current_time_stamp) - timedelta(minutes=20) >= last_updated %}
+        {% endif %}
+
+        {% if is_difference_popp_calibration %}
+          {% set update_calibration = old_state != new_state %}
+        {% endif %}
+
+        {% if update_calibration %}
+          {% set n.dict = n.dict + [(calibration_entity, [{'value': new_state, 'valve': valve}])] %}
+        {% endif%}
+
+      {% endfor %}
+    {% endif %}
+
+    {{ dict.from_keys(n.dict) }}
+
+
+  # COMMON CALIBRATION e.g. TUYA
+  valves_calibration_common: "{{ valves | reject('in', valves_tado + valves_dph + valves_xiaomi) | list }}"
+  calibration_common: >
+    {% set n = namespace(dict=[]) %}
+
+    {% if is_native_calibration %}
+
+      {% for valve in valves_calibration_common %}
+
+        {% set calibration_entities = device_entities(device_id(valve)) |
+                                    expand | selectattr('domain','in','number') |
+                                    selectattr('entity_id', 'search', 'offset') |
+                                    map(attribute='entity_id') | list %}
+
+        {% if calibration_entities | count == 0 %}
+          {% set calibration_entities = device_entities(device_id(valve)) |
+                                    expand | selectattr('domain','in','number') |
+                                    selectattr('entity_id', 'search', 'calibration') |
+                                    map(attribute='entity_id') | list %}
+        {% endif %}
+
+        {% if calibration_entities | count > 0 %}
+
+          {% set calibration_entity = calibration_entities | first %}
+          {% set step = state_attr(calibration_entity, 'step') | float %}
+          {% set min_calibration_value = state_attr(calibration_entity,'min') | float %}
+          {% set max_calibration_value = state_attr(calibration_entity,'max') | float %}
+          {% set thermostat_temperature = state_attr(valve, 'current_temperature') | float %}
+          {% set offset_old = states(calibration_entity) | float(0) %}
+
+          {% set new_calibration_value = value_temperature_sensor | float - (thermostat_temperature - offset_old) %}
+
+          {% set new_calibration_value = iif(new_calibration_value > max_calibration_value, max_calibration_value, new_calibration_value) %}
+          {% set new_calibration_value = iif(new_calibration_value < min_calibration_value, min_calibration_value, new_calibration_value) %}
+
+          {% set round_size = iif('.' in (step | string) and not is_rounded_values, (step | string).split('.')[1] | length, 0) %}
+
+          {% set offset_new = ((new_calibration_value | float(0) / step) | round(0) * step) | round(round_size) | float %}
+
+          {% if (float(offset_old) - float(offset_new)) | abs >= float(input_calibration_delta) %}
+            {% set n.dict = n.dict + [(calibration_entity, [{'value': offset_new, 'valve': valve}])] %}
+          {% endif %}
+
+        {% endif %}
+
+      {% endfor %}
+    {% endif %}
+
+    {{ dict.from_keys(n.dict) }}
+
+  calibration_value_set: "{{ dict(dict(calibration_xiaomi, **calibration_dph),**calibration_common) }}"
+
+  #####################################################################################
+  #################################### CHANGES ########################################
+  #####################################################################################
+
+  mode: >
+    {% if not state_ahc or state_window %}
+      {{ 'off' }}
+    {% else %}
+      {{ input_hvac_mode }}
+    {% endif %}
+
+  temperature_comfort: "{{ [entry_comfort_temp, input_temperature_comfort, input_temperature_comfort_static] | reject('==', none) | first }}"
+  temperature_eco: "{{ [entry_eco_temp, input_temperature_eco, input_temperature_eco_static] | reject('==', none) | first }}"
+  temperature: >
+    {% if state_window and input_window_open_temperature > 0 %}
+      {{ input_window_open_temperature }}
+    {% else %}
+      {{ iif(set_comfort, temperature_comfort, temperature_eco) }}
+    {% endif %}
+
+  set_max_temperature: "{{ is_force_max_temperature or is_liming_protection }}"
+
+  changes: >
+    {% set n = namespace(dict=[]) %}
+
+    {% if not is_temperature_change_trigger %}
+      {{ n.dict }}
+    {% else %}
+      {% for valve in input_trvs %}
+
+        {% set current_valve_temp = state_attr(valve, 'current_temperature') | float(20) %}
+        {% set current_valve_target_temp = state_attr(valve, 'temperature') | float(temperature) %}
+        {% set current_valve_mode = states(valve) %}
+        {% set min_temp = state_attr(valve, 'min_temp') | float(5) %}
+        {% set max_temp = state_attr(valve, 'max_temp') | float(30) %}
+
+        {% set dont_turn_off = 
+              valve in valves_without_off_mode or 
+              is_not_off_but_min or 
+              (state_window and input_window_open_temperature > 0) or
+              set_max_temperature %}
+
+        {% set valve_mode = iif(mode == 'off' and dont_turn_off, current_valve_mode, mode) %}
+
+        {% set valve_temp = iif(set_max_temperature, max_temp, temperature) %}
+
+        {% if mode == 'off' and dont_turn_off and (valve in valves_without_off_mode or is_not_off_but_min) %}
+          {% set valve_temp = min_temp %}
+        {% endif %}
+
+        {% if mode != 'off' %}
+
+          {% if is_aggressive_mode %}
+
+            {% if is_generic_calibration %}
+              {% set current_valve_temp = value_temperature_sensor | float %}
+            {% endif %}
+
+            {% set temp_diff = valve_temp - current_valve_temp %}
+
+            {% if temp_diff * factor < input_aggressive_mode_range * -1 %}
+              {% set valve_temp = valve_temp - input_aggressive_mode_offset * factor %}
+            {% elif temp_diff * factor > input_aggressive_mode_range %}
+              {% set valve_temp = valve_temp + input_aggressive_mode_offset * factor %}
+            {% endif %}
+
+          {% endif %}
+
+          {% if is_generic_calibration %}
+
+            {% set sensor_temp = value_temperature_sensor | float(current_valve_temp) %}
+
+            {% if current_valve_temp != sensor_temp %}
+              {% set offset = sensor_temp - current_valve_temp %}
+
+              {% set offset = iif(offset > float(input_generic_calibration_offset), input_generic_calibration_offset, offset) %}
+              {% set offset = iif(offset < float(input_generic_calibration_offset) * -1, input_generic_calibration_offset * -1, offset) %}
+
+              {% set temp_with_offset = float(valve_temp) - float(offset) %}
+              {% set step = state_attr(valve, 'target_temp_step') | float(0.5) %}
+
+              {% set temp_with_offset = (temp_with_offset | float(0) / float(step)) | round(0) * float(step) %}
+
+              {% set valve_temp = iif(is_rounded_values == true, float(temp_with_offset) | round(), temp_with_offset | round(1)) %}
+
+            {% endif %}
+          {% endif %}
+
+        {% endif %}
+
+        {% set valve_temp = iif(valve_temp > max_temp, max_temp, valve_temp) %}
+        {% set valve_temp = iif(valve_temp < min_temp, min_temp, valve_temp) %}
+
+        {% if current_valve_mode != valve_mode or current_valve_target_temp != valve_temp %}
+          {% set n.dict = n.dict + [(valve, [{'mode': valve_mode , 'temp': valve_temp}])] %}
+        {% endif %}
+
+      {% endfor %}
+
+      {{ dict.from_keys(n.dict) }}
     {% endif %}
 
 conditions: []
