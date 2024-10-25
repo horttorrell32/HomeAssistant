@@ -1875,102 +1875,6 @@ variables:
 
     {{ iif(state_outside_temp == none, result, result and state_outside_temp) }}
 
-  # persons
-  is_person_defined: "{{ input_persons | count > 0 }}"
-  is_guest_mode: "{{ input_mode_guest != none and is_state(input_mode_guest, 'on') }}"
-  is_anybody_home: >
-    {% if is_guest_mode %}
-      {{ true }}
-    {% elif not is_person_defined %}
-      {{ false }}
-    {% else %}
-      {% set on_time_delta = current_time_stamp | as_datetime - timedelta(**input_people_entering_home_duration) %}
-      {% set off_time_delta = current_time_stamp | as_datetime - timedelta(**input_people_leaving_home_duration) %}
-
-      {% set uptime_on = as_datetime(uptime) + timedelta(**input_people_entering_home_duration) %}
-      {% set uptime_off = as_datetime(uptime) + timedelta(**input_people_leaving_home_duration) %}
-
-      {% set result = false %}
-
-      {% if uptime_on > on_time_delta or uptime_off > off_time_delta %}
-        {{ input_persons  | expand 
-                          | selectattr('state', 'eq', 'home') 
-                          | list 
-                          | count > 0 }}
-      {% else %}
-        {% set somebody_is_home = input_persons | expand
-                                            | selectattr('state', 'eq', 'home')
-                                            | selectattr('last_changed', '<=', on_time_delta)
-                                            | list
-                                            | count > 0 %}
-
-        {% set somebody_is_leaving = input_persons | expand 
-                                                | rejectattr('state', 'eq', 'home')
-                                                | selectattr('last_changed', '>', off_time_delta) 
-                                                | list
-                                                | count > 0 %}
-
-        {{ somebody_is_home or somebody_is_leaving }}
-      {% endif %}
-    {% endif %}
-
-  # schedules
-  active_scheduler: >
-    {% set selected_scheduler = none %}
-    {% set schedules_count = input_schedulers | count %}
-
-    {% if schedules_count == 0 %}
-      {% set selected_scheduler = none %}
-    {% elif schedules_count == 1 or input_scheduler_selector == none %}
-      {% set selected_scheduler = input_schedulers | first %}
-    {% elif schedules_count > 1 %}
-      {% set selector_value = states(input_scheduler_selector) %}
-
-      {% if is_number(selector_value) %}
-        {% set selector_value = iif(selector_value | int > schedules_count, schedules_count, selector_value) %}
-        {% set selector_value = iif(selector_value | int <= 0, 1, selector_value) %}
-        {% set selected_scheduler = input_schedulers[selector_value | int - 1] %}
-      {% elif selector_value in ['on','off'] %}
-        {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
-      {% else %}
-        {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
-        {% if (selected_scheduler == none) %}
-          {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
-        {% endif %}
-      {% endif %}
-    {% endif %}
-
-    {{ selected_scheduler }}
-
-  state_scheduler: "{{ active_scheduler != none and is_state(active_scheduler,'on') }}"
-
-  # presence
-  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
-  is_presence_scheduler_defined: "{{ input_scheduler_presence != none }}"
-  state_presence_scheduler: "{{ is_presence_scheduler_defined and is_state(input_scheduler_presence, 'on') }}"
-
-  state_presence_sensor: >
-    {% if not is_presence_sensor_defined %}
-      {{ false }}
-    {% else %}
-      {% set last_changed = [input_presence_sensor] | expand | map(attribute='last_changed') | first %}
-      {% set sensor_state = is_state(input_presence_sensor, 'on') %}
-      {% set reaction_time = iif(sensor_state, input_presence_reaction_on_time, input_presence_reaction_off_time) %}
-      {% set min_timestamp = last_changed + timedelta(**reaction_time) %}
-      {% set current_ts = current_time_stamp | as_datetime%}
-
-      {% if is_uptime_defined and as_datetime(uptime) + timedelta(**reaction_time) > current_ts - timedelta(**reaction_time) %}
-        {{ sensor_state }}
-      {% else %}
-        {% set is_limit = min_timestamp <= current_ts %}
-
-        {{ (sensor_state == true and is_limit) or (sensor_state == false and not is_limit) }}
-      {% endif %}
-    {% endif %}
-
-  state_presence: >
-    {{ iif(is_presence_sensor_defined, state_presence_scheduler and state_presence_sensor, state_presence_sensor) }}
-
   # proximity
   is_proximity_defined: "{{ input_proximity != none }}"
 
@@ -2013,6 +1917,106 @@ variables:
 
     {{ towards_and_in_distance }}
 
+  # persons
+  is_person_defined: "{{ input_persons | count > 0 }}"
+  is_guest_mode: "{{ input_mode_guest != none and is_state(input_mode_guest, 'on') }}"
+  is_anybody_home: >
+    {% if is_guest_mode %}
+      {{ true }}
+    {% elif not is_person_defined %}
+      {{ false }}
+    {% else %}
+      {% set on_time_delta = current_time_stamp | as_datetime - timedelta(**input_people_entering_home_duration) %}
+      {% set off_time_delta = current_time_stamp | as_datetime - timedelta(**input_people_leaving_home_duration) %}
+
+      {% set uptime_on = as_datetime(uptime) + timedelta(**input_people_entering_home_duration) %}
+      {% set uptime_off = as_datetime(uptime) + timedelta(**input_people_leaving_home_duration) %}
+
+      {% set result = false %}
+
+      {% if uptime_on > on_time_delta or uptime_off > off_time_delta %}
+        {{ input_persons  | expand 
+                          | selectattr('state', 'eq', 'home') 
+                          | list 
+                          | count > 0 }}
+      {% else %}
+        {% set somebody_is_home = input_persons | expand
+                                            | selectattr('state', 'eq', 'home')
+                                            | selectattr('last_changed', '<=', on_time_delta)
+                                            | list
+                                            | count > 0 %}
+
+        {% set somebody_is_leaving = input_persons | expand 
+                                                | rejectattr('state', 'eq', 'home')
+                                                | selectattr('last_changed', '>', off_time_delta) 
+                                                | list
+                                                | count > 0 %}
+
+        {{ somebody_is_home or somebody_is_leaving }}
+      {% endif %}
+    {% endif %}
+
+  is_anybody_home_or_proximity: "{{ is_anybody_home or state_proximity_way_home or state_proximity_arrived}}"
+
+  # schedules
+  active_scheduler: >
+    {% set selected_scheduler = none %}
+    {% set schedules_count = input_schedulers | count %}
+
+    {% if schedules_count == 0 %}
+      {% set selected_scheduler = none %}
+    {% elif schedules_count == 1 or input_scheduler_selector == none %}
+      {% set selected_scheduler = input_schedulers | first %}
+    {% elif schedules_count > 1 %}
+      {% set selector_value = states(input_scheduler_selector) %}
+
+      {% if is_number(selector_value) %}
+        {% set selector_value = iif(selector_value | int > schedules_count, schedules_count, selector_value) %}
+        {% set selector_value = iif(selector_value | int <= 0, 1, selector_value) %}
+        {% set selected_scheduler = input_schedulers[selector_value | int - 1] %}
+      {% elif selector_value in ['on','off'] %}
+        {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
+      {% else %}
+        {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
+        {% if (selected_scheduler == none) %}
+          {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
+        {% endif %}
+      {% endif %}
+    {% endif %}
+
+    {{ selected_scheduler }}
+
+  is_scheduler_defined: "{{ active_scheduler != none }}"  
+
+  state_scheduler: "{{ active_scheduler != none and is_state(active_scheduler,'on') }}"
+
+  # presence
+  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
+  is_presence_scheduler_defined: "{{ input_scheduler_presence != none }}"
+  state_presence_scheduler: "{{ is_presence_scheduler_defined and is_state(input_scheduler_presence, 'on') }}"
+
+  state_presence_sensor: >
+    {% if not is_presence_sensor_defined %}
+      {{ false }}
+    {% else %}
+      {% set last_changed = [input_presence_sensor] | expand | map(attribute='last_changed') | first %}
+      {% set sensor_state = is_state(input_presence_sensor, 'on') %}
+      {% set reaction_time = iif(sensor_state, input_presence_reaction_on_time, input_presence_reaction_off_time) %}
+      {% set min_timestamp = last_changed + timedelta(**reaction_time) %}
+      {% set current_ts = current_time_stamp | as_datetime%}
+
+      {% if is_uptime_defined and as_datetime(uptime) + timedelta(**reaction_time) > current_ts - timedelta(**reaction_time) %}
+        {{ sensor_state }}
+      {% else %}
+        {% set is_limit = min_timestamp <= current_ts %}
+
+        {{ (sensor_state == true and is_limit) or (sensor_state == false and not is_limit) }}
+      {% endif %}
+    {% endif %}
+
+  state_presence: >
+    {{ iif(is_presence_sensor_defined, state_presence_scheduler and state_presence_sensor, state_presence_sensor) }}
+
   # force max temperature
   is_force_max_temperature: "{{ input_force_max_temperature != none and is_state(input_force_max_temperature, 'on') }}"
 
@@ -2032,7 +2036,7 @@ variables:
 
   # away
   is_away: >
-    {% if is_person_defined and not is_anybody_home %}
+    {% if is_person_defined and not is_anybody_home_or_proximity %}
       {{ (is_scheduler_away_mode and state_scheduler) or (is_presence_away_mode and state_presence_scheduler and not state_presence) }}
     {% elif presence_ignor_people and is_presence_away_mode %}
       {{ state_presence_scheduler and not state_presence }}
@@ -2134,7 +2138,8 @@ variables:
 
   # global
   no_changes: "{{ input_persons | count == 0 and input_mode_guest == none and input_schedulers | count == 0 and input_presence_sensor == none and input_proximity == none }}"
-  set_comfort: "{{ false }}"
+  last_comfort_entity_change: "{{ [input_temperature_comfort] | expand | map(attribute='last_changed') | list | first | default(none) }}"
+  last_eco_entity_change: "{{ [input_temperature_eco] | expand | map(attribute='last_changed') | list | first | default(none) }}"
 
   #####################################################################################
   ################################## ADJUSTMENTS ######################################
@@ -2206,14 +2211,14 @@ variables:
     {% endif %}
 
   entry_comfort_temp: >
-    {% if entry != none and 'comfort' in entry.keys() %}
+    {% if entry != none and 'comfort' in entry.keys() and (last_comfort_entity_change == none or entry_time > last_comfort_entity_change) %}
       {{ entry['comfort'] }}
     {% else %}
       {{ none }}
     {% endif %}
 
   entry_eco_temp: >
-    {% if entry != none and 'eco' in entry.keys() %}
+    {% if entry != none and 'eco' in entry.keys() and (last_comfort_entity_change == none or entry_time > last_eco_entity_change) %}
       {{ entry['eco'] }}
     {% else %}
       {{ none }}
@@ -2418,6 +2423,21 @@ variables:
   #################################### CHANGES ########################################
   #####################################################################################
 
+  set_comfort: >
+    {% if is_away %}
+      {{ true }}
+    {% elif not is_scheduler_defined and not is_presence_sensor_defined %}
+      {{ is_anybody_home_or_proximity }}
+    {% else %}
+      {% set comfort_state = state_scheduler or state_presence %}
+
+      {% if is_person_defined or is_proximity_defined %}
+        {{ is_anybody_home_or_proximity and comfort_state }}
+      {% else %}
+        {{ comfort_state }}
+      {% endif %}
+    {% endif %}
+
   mode: >
     {% if not state_ahc or state_window %}
       {{ 'off' }}
@@ -2426,12 +2446,13 @@ variables:
     {% endif %}
 
   temperature_comfort: "{{ [entry_comfort_temp, input_temperature_comfort, input_temperature_comfort_static] | reject('==', none) | first }}"
+  temperature_away: "{{ temperature_comfort | float - input_away_offset }}"
   temperature_eco: "{{ [entry_eco_temp, input_temperature_eco, input_temperature_eco_static] | reject('==', none) | first }}"
   temperature: >
     {% if state_window and input_window_open_temperature > 0 %}
       {{ input_window_open_temperature }}
     {% else %}
-      {{ iif(set_comfort, temperature_comfort, temperature_eco) }}
+      {{ iif(set_comfort, iif(is_away, temperature_away, temperature_comfort), temperature_eco) }}
     {% endif %}
 
   set_max_temperature: "{{ is_force_max_temperature or is_liming_protection }}"
@@ -2532,6 +2553,7 @@ actions:
       mode: "{{ iif(set_comfort == true, 'comfort', 'eco') }}"
       automation: "{{ this.entity_id }}"
       is_anybody_home: "{{ is_anybody_home }}"
+      is_anybody_home_or_proximity: "{{ is_anybody_home_or_proximity }}"
       is_guest_mode: "{{ is_guest_mode }}"
       active_scheduler: "{{ active_scheduler }}"
       state_scheduler: "{{ state_scheduler }}"
@@ -2550,5 +2572,10 @@ actions:
       is_liming_protection: "{{ is_liming_protection }}"
       state_outside_temp: "{{ state_outside_temp }}"
       entry_time: "{{ entry_time }}"
+      hvac_mode: "{{ mode }}"
+      temperature_comfort: "{{ temperature_comfort }}"
+      temperature_eco: "{{ temperature_eco }}"
+      temperature: "{{ temperature }}"
+      set_max_temperature: "{{ set_max_temperature }}"
 
 mode: queued
