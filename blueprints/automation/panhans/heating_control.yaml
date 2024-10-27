@@ -1204,10 +1204,6 @@ trigger_variables:
   input_temperature_sensor: !input input_temperature_sensor
   is_temperature_sensor_defined: "{{ input_temperature_sensor != none }}"
 
-  # uptime
-  uptime_sensor: "{{ integration_entities('uptime') | first | default(none) }}"
-  is_uptime_defined: "{{ uptime_sensor != none }}"
-
   # people
   input_persons: !input input_persons
   input_mode_guest: !input input_mode_guest
@@ -1222,6 +1218,7 @@ trigger_variables:
   input_schedulers: !input input_schedulers
   input_scheduler_selector: !input input_scheduler_selector
   input_scheduler_presence: !input input_scheduler_presence
+  is_scheduler_presence_defined: "{{ input_scheduler_presence != none }}"
 
   # temperatures
   input_temperature_comfort: !input input_temperature_comfort
@@ -1399,24 +1396,27 @@ trigger:
   # presence sensor
   - trigger: template
     id: temperature_change_presence_on
-    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'on') }}"
+    value_template: >
+      {% set state_presence_sensor = input_presence_sensor != none and is_state(input_presence_sensor, 'on') %}
+      
+      {% if is_scheduler_presence_defined %}
+        {{ state_presence_sensor and is_state(input_scheduler_presence, 'on') }}
+      {% else %}
+        {{ state_presence_sensor }}
+      {% endif %}
     for: !input input_presence_reaction_on_time
 
   - trigger: template
-    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'off') }}"
+    value_template: >
+      {% set state_presence_sensor = input_presence_sensor != none and is_state(input_presence_sensor, 'off') %}
+      
+      {% if is_scheduler_presence_defined %}
+        {{ state_presence_sensor and is_state(input_scheduler_presence, 'on') or is_state(input_scheduler_presence, 'off') }}
+      {% else %}
+        {{ state_presence_sensor }}
+      {% endif %}
     id: temperature_change_presence_off
     for: !input input_presence_reaction_off_time
-
-  # presence scheduler
-  - trigger: template
-    id: temperature_change_presence_scheduler_on
-    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'on') }}"
-    for: !input input_action_call_delay
-
-  - trigger: template
-    id: temperature_change_presence_scheduler_off
-    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'off') }}"
-    for: !input input_action_call_delay
 
   # proximity
   - trigger: template
@@ -2136,6 +2136,22 @@ variables:
   valves_without_off_mode: > 
     {{ valves | reject('in',valves_off_mode) | list }}
 
+  # tado
+  valves_tado: "{{ valves | select('is_device_attr', 'manufacturer', 'Tado') | list }}"
+
+  # xiaomi / aqara
+  valves_xiaomi_xiaomi: "{{ valves | select('is_device_attr', 'manufacturer', 'Xiaomi') | list }}"
+  valves_xiaomi_aqara: "{{ valves | select('is_device_attr', 'manufacturer', 'Aqara') | list }}"
+  valves_xiaomi: "{{ valves_xiaomi_xiaomi + valves_xiaomi_aqara }}"
+
+  # danfoss / popp / hive
+  valves_danfoss: "{{ valves | select('is_device_attr', 'manufacturer', 'Danfoss') | list }}"
+  valves_popp: "{{ valves | select('is_device_attr', 'manufacturer', 'Popp') | list }}"
+  valves_hive: "{{ valves | select('is_device_attr', 'manufacturer', 'Hive') | list }}"
+  valves_dph: "{{ valves_danfoss + valves_popp + valves_hive }}"
+
+  valves_calibration_common: "{{ valves | reject('in', valves_tado + valves_dph + valves_xiaomi) | list }}"
+
   # global
   no_changes: "{{ input_persons | count == 0 and input_mode_guest == none and input_schedulers | count == 0 and input_presence_sensor == none and input_proximity == none }}"
   last_comfort_entity_change: "{{ [input_temperature_comfort] | expand | map(attribute='last_changed') | list | first | default(none) }}"
@@ -2238,15 +2254,84 @@ variables:
   is_temperature_change_trigger: "{{ true }}"
 
   # calibration
-  is_calibration_trigger: "{{ true }}"
-
-  is_generic_calibration_trigger: "{{ is_calibration_trigger or is_temperature_change_trigger }}"
-
   is_calibration_popp_periodical_trigger: >
     {{ trigger.id in ['calibration_popp_ping','hastart','reload'] }}
 
   is_calibration_difference_popp_trigger: >
     {{ trigger.id in ['calibration_popp_change'] }}
+
+  is_calibration_trigger: >
+    {% if valves_dph | count == 0 and trigger.id is defined and 'calibration_popp' in trigger.id %}
+      {{ false }}
+    {% else %}
+      {{ trigger.id is defined and 'calibration' in trigger.id and not is_generic_calibration }}
+    {% endif %}
+
+  # changes
+  is_generic_calibration_trigger: "{{ is_calibration_trigger and is_generic_calibration }}"
+
+  is_change_trigger: >
+    {{ trigger.id is defined and 
+        'temperature_change' in trigger.id and 
+        ('presence' in trigger.id or 
+        'scheduler' in trigger.id or 
+        'proximity' in trigger.id or 
+        'person' in trigger.id) }}
+
+  is_reset: >
+    {{ is_reset_temperature and is_change_trigger }}
+
+  is_changes_trigger: >
+    {% if state_window and trigger.id is defined and 'temperature_change_window_off' not in trigger.id %}
+      {{ false }}
+    {% else %}
+      {{ (trigger.id is defined and 'temperature_change' in trigger.id) or is_generic_calibration_trigger }}
+    {% endif %}
+
+  is_scene_create_trigger: >
+    {{ trigger.id is defined and ("window_on" in trigger.id or "party_on" in trigger.id) }}
+
+  is_scene_apply_trigger: >
+    {{ trigger.id is defined and ("window_off" in trigger.id or "party_off" in trigger.id) and not is_legacy_restore }}
+
+  is_scene_destroy_trigger: >
+    {{ (is_change_trigger or trigger.id == 'temperature_change_heating_adjustment') and
+        (state_window or state_party) }}
+
+  # scene management
+  scene_entities: "{{ valves }}"
+  scene_window_id: "{{ 'scene.' + this.entity_id | replace('.','_') + '_window' }}"
+  scene_party_id: "{{ 'scene.' + this.entity_id | replace('.','_') + '_party' }}"
+  scenes_all: "{{ [scene_window_id, scene_party_id] }}"
+
+  scene_to_apply: >
+    {% if is_scene_apply_trigger and "window_off" in trigger.id %}
+      {{ scene_window_id }}
+    {% elif is_scene_apply_trigger and "party_off" in trigger.id %}
+      {{ scene_party_id }}
+    {% endif %}
+
+  scenes_to_destroy: >
+    {% set scenes = [] %}
+    {% if is_scene_destroy_trigger %}
+      {% set scenes = iif(state_window, scenes + [scene_window_id], scenes) %}
+      {% set scenes = iif(state_party, scenes + [scene_party_id], scenes) %}
+    {% endif %}
+    {{ scenes }}
+  
+  # reset temperature
+  reset_entity: >
+    {% if is_reset and set_comfort and 'on' in trigger.id %}
+      {{ input_temperature_eco }}
+    {% elif is_reset and not set_comfort and 'off' in trigger.id %}
+      {{ input_temperature_comfort }}
+    {% endif %}
+
+  is_reset_trigger: "{{ is_reset and reset_entity != none }}"
+
+  reset_temperature: >
+    {{ iif(is_reset_trigger and reset_entity == input_temperature_eco, 
+        input_temperature_eco_static, input_temperature_comfort_static) }}
 
   #####################################################################################
   ################################## CALIBRATION ######################################
@@ -2265,7 +2350,6 @@ variables:
   rounding: "{{ iif(is_rounded_values, 0, 2) | int }}"
 
   # TADO
-  valves_tado: "{{ valves | select('is_device_attr', 'manufacturer', 'Tado') | list }}"
   calibration_tado: >
     {% set n = namespace(dict=[]) %}
 
@@ -2289,9 +2373,6 @@ variables:
     {{ dict.from_keys(n.dict) }}
 
   # XIAOMI / AQARA
-  valves_xiaomi_xiaomi: "{{ valves | select('is_device_attr', 'manufacturer', 'Xiaomi') | list }}"
-  valves_xiaomi_aqara: "{{ valves | select('is_device_attr', 'manufacturer', 'Aqara') | list }}"
-  valves_xiaomi: "{{ valves_xiaomi_xiaomi + valves_xiaomi_aqara }}"
   calibration_xiaomi: >
     {% set n = namespace(dict=[]) %}
 
@@ -2319,19 +2400,7 @@ variables:
 
     {{ dict.from_keys(n.dict) }}
 
-  
   # DANFOSS, POPP, HIVE
-  valves_danfoss: "{{ valves | select('is_device_attr', 'manufacturer', 'Danfoss') | list }}"
-  valves_popp: "{{ valves | select('is_device_attr', 'manufacturer', 'Popp') | list }}"
-  valves_hive: "{{ valves | select('is_device_attr', 'manufacturer', 'Hive') | list }}"
-  valves_dph: "{{ valves_danfoss + valves_popp + valves_hive }}"
-
-  is_periodical_popp_calibration: >
-    {{ trigger.id in ['calibration_popp_ping','hastart','reload'] }}
-
-  is_difference_popp_calibration: >
-    {{ trigger.id in ['calibration_popp_change'] }}
-
   calibration_dph: >
     {% set n = namespace(dict=[]) %}
     {% if (is_calibration_popp_periodical_trigger or is_calibration_difference_popp_trigger) and is_native_calibration %}
@@ -2366,9 +2435,7 @@ variables:
 
     {{ dict.from_keys(n.dict) }}
 
-
   # COMMON CALIBRATION e.g. TUYA
-  valves_calibration_common: "{{ valves | reject('in', valves_tado + valves_dph + valves_xiaomi) | list }}"
   calibration_common: >
     {% set n = namespace(dict=[]) %}
 
@@ -2438,8 +2505,14 @@ variables:
       {% endif %}
     {% endif %}
 
+  set_max_temperature: "{{ is_force_max_temperature or is_liming_protection }}"
+
   mode: >
-    {% if not state_ahc or state_window %}
+    {% if not state_ahc %}
+      {{ 'off' }}
+    {% elif state_window and input_window_open_temperature | int == 0 and not set_max_temperature %}
+      {{ 'off' }}
+    {% elif is_off_instead_min and not set_comfort %}
       {{ 'off' }}
     {% else %}
       {{ input_hvac_mode }}
@@ -2448,17 +2521,19 @@ variables:
   temperature_comfort: "{{ [entry_comfort_temp, input_temperature_comfort, input_temperature_comfort_static] | reject('==', none) | first }}"
   temperature_away: "{{ temperature_comfort | float - input_away_offset }}"
   temperature_eco: "{{ [entry_eco_temp, input_temperature_eco, input_temperature_eco_static] | reject('==', none) | first }}"
-  temperature: >
+  target_temperature: >
     {% if state_window and input_window_open_temperature > 0 %}
       {{ input_window_open_temperature }}
+    {% elif state_mode_party %}
+      {{ iif(party_temp != none, party_temp, temperature_comfort) }}
     {% else %}
       {{ iif(set_comfort, iif(is_away, temperature_away, temperature_comfort), temperature_eco) }}
     {% endif %}
 
-  set_max_temperature: "{{ is_force_max_temperature or is_liming_protection }}"
-
   changes: >
     {% set n = namespace(dict=[]) %}
+
+    {% set original_mode = mode %}
 
     {% if not is_temperature_change_trigger %}
       {{ n.dict }}
@@ -2479,7 +2554,17 @@ variables:
 
         {% set valve_mode = iif(mode == 'off' and dont_turn_off, current_valve_mode, mode) %}
 
-        {% set valve_temp = iif(set_max_temperature, max_temp, temperature) %}
+        {% set valve_temp = iif(set_max_temperature, max_temp, target_temperature) %}
+        {% set valve_temp = iif(is_not_off_but_min and mode == 'off', min_temp, target_temperature) %}
+
+        {% set ref_temp = current_valve_temp %}
+        {% if is_temperature_sensor_defined %}
+          {% set ref_temp = value_temperature_sensor %}
+        {% endif %}
+
+        {% if is_heat_only_if_below_real_temp and target_temperature > ref_temp %}
+          {% set mode = 'off' %}
+        {% endif %}
 
         {% if mode == 'off' and dont_turn_off and (valve in valves_without_off_mode or is_not_off_but_min) %}
           {% set valve_temp = min_temp %}
@@ -2534,18 +2619,38 @@ variables:
 
       {% endfor %}
 
+      {% set mode = original_mode %}
+
       {{ dict.from_keys(n.dict) }}
     {% endif %}
+
+  automation_name: "{{ state_attr(this.entity_id,'friendly_name') }}"
+
+  warnings: >
+    {% set messages = [] %}
+    {% if not is_uptime_defined %}
+      {% set messages = messages + ['To make Advance Heating Control work properly just setup the uptime integration (https://www.home-assistant.io/integrations/uptime/)'] %}
+    {% elif is_aggressive_mode and not input_aggressive_mode_calibration and is_physical_change_enabled %}
+      {% set messages = messages + ['Aggressive Mode in combination with physical change / sync feature is not recommended. Expect unwanted side effects.'] %}
+    {% elif is_generic_calibration and is_physical_change_enabled %}
+      {% set messages = messages + ['Generic Calibration in combination with physical change / sync feature is not recommended. Expect unwanted side effects.'] %}
+    {% endif %}
+
+    {{ messages }}
 
 conditions: []
 
 actions:
-  - action: system_log.write
-    data:
-      level: warning
-      logger: blueprints.panhans.heatingcontrol
-      message: >
-        {{ input_time_based_temperature_change_valve_target }}
+  - if:
+      - condition: template
+        value_template: "{{ warnings | count > 0 }}"
+    then:
+      - action: system_log.write
+        data:
+          level: warning
+          logger: blueprints.panhans.heatingcontrol
+          message: >
+            {{ 'AHC-Warnings - ' + automation_name + ':\n' + warnings | join('\n') }}
 
   - event: ahc_event
     event_data:
@@ -2575,7 +2680,177 @@ actions:
       hvac_mode: "{{ mode }}"
       temperature_comfort: "{{ temperature_comfort }}"
       temperature_eco: "{{ temperature_eco }}"
-      temperature: "{{ temperature }}"
+      target_temperature: "{{ target_temperature }}"
       set_max_temperature: "{{ set_max_temperature }}"
+      last_trigger_id: "{{ trigger.id }}"
+      warnings: "{{ warnings | count > 0 }}"
+
+  - choose:
+      # calibration
+      - conditions:
+          - condition: template
+            value_template: "{{ is_calibration_trigger }}"
+        sequence:
+          - repeat:
+              count: "{{ calibration_number | count | int }}"
+              sequence:
+                - variables:
+                    index: "{{ repeat.index-1 }}"
+                    calibration_entity: "{{ (calibration_number.keys() | list) [index] }}"
+                    thermostat: "{{ (((calibration_number.values() | list) [index]) | first) ['valve'] }}"
+                    offset: "{{ (((calibration_number.values() | list) [index]) | first) ['value'] }}"
+                    select_entity: "{{ device_entities(device_id(thermostat)) |
+                                expand | selectattr('domain','in','select') |
+                                selectattr('attributes.options', 'contains', 'external') |
+                                map(attribute='entity_id') | list | first | default(none) }}"
+
+                - action: system_log.write
+                  data:
+                    message: >
+                      AHC - Calibration - automation_name {{" \n "}}
+                      calibration entity: {{ calibration_entity }} {{" \n "}}
+                      offset: {{ offset }}
+                    level: !input input_log_level
+                    logger: blueprints.panhans.heatingcontrol
+
+                - if:
+                    - condition: template
+                      value_template: "{{ thermostat in valves_xiaomi }}"
+                    - condition: template
+                      value_template: "{{ select_entity != none and not is_state(select_entity, 'external') }}"
+                  then:
+                    - action: select.select_option
+                      target:
+                        entity_id: "{{ select_entity }}"
+                      data:
+                        option: external
+                    - delay: !input input_action_call_delay
+
+                - action: number.set_value
+                  data:
+                    value: "{{ float(offset) }}"
+                  target:
+                    entity_id: "{{ calibration_entity }}"
+                - delay: !input input_action_call_delay
+
+          # TADO CALIBRATION
+          - repeat:
+              count: "{{ calibration_tado | count | int }}"
+              sequence:
+                - variables:
+                    index: "{{ repeat.index-1 }}"
+                    thermostat: "{{ (calibration_tado.keys() | list) [index] }}"
+                    offset: "{{ (((calibration_tado.values() | list) [index]) | first) ['value'] }}"
+                - action: tado.set_climate_temperature_offset
+                  data:
+                    offset: "{{ offset }}"
+                    entity_id: "{{ thermostat }}"
+                - delay: !input input_action_call_delay
+            
+    # changes
+    default: 
+      - if:
+          - condition: and
+            conditions: !input input_custom_condition
+        then:
+          # reset
+          - if:
+              - condition: template
+                value_template: "{{ is_reset_trigger }}"
+            then:
+              - action: input_number.set_value
+                data:
+                  value: "{{ reset_temperature }}"
+                target:
+                  entity_id: "{{ reset_entity }}"
+
+          # scenes
+          # scene apply
+          - variables:
+              scene_to_apply_tmp: >
+                {% if scene_to_apply == none or states(scene_to_apply) == 'unknown' %}
+                  {{ scenes_all | reject('eq',scene_to_apply) | first | default(none) }}
+                {% else %}
+                  {{ scene_to_apply }}
+                {% endif %}
+          - if:
+              - condition: template
+                value_template: "{{ is_scene_apply_trigger }}"
+              - condition: template
+                value_template: "{{ scene_to_apply_tmp != none and states(scene_to_apply_tmp) != 'unknown' }}"
+            then:
+              - action: scene.turn_on
+                target:
+                  entity_id: "{{ scene_to_apply }}"
+              - action: scene.delete
+                target:
+                  entity_id: "{{ scene_to_apply }}"
+
+          # scene destroy
+          - if:
+              - condition: template
+                value_template: "{{ is_scene_destroy_trigger }}"
+              - condition: template
+                value_template: "{{ scenes_to_destroy | count > 0 }}"
+            then:
+              - repeat:
+                  count: "{{ scenes_to_destroy | count | int }}"
+                  sequence:
+                    - variables:
+                        scene_to_destroy: "{{ scenes_to_destroy[repeat.index-1] }}"
+                    - if:
+                        - condition: template
+                          value_template: "{{ states[scene_to_destroy] != 'unknown' }}"
+                      then:
+                        - action: scene.delete
+                          target:
+                            entity_id: "{{ scene_to_destroy }}"
+
+          # changes
+          - repeat:
+              count: "{{ changes | count | int }}"
+              sequence:
+                - variables:
+                    index: "{{ repeat.index-1 }}"
+                    thermostat: "{{ (changes.keys() | list) [index] }}"
+                    mode: "{{ (((changes.values() | list) [index]) | first) ['mode'] }}"
+                    target_temperature: "{{ (((changes.values() | list) [index]) | first) ['temp'] }}"
+                - action: system_log.write
+                  data:
+                    message: >
+                      AHC - Change - automation_name {{" \n "}}
+                      thermostat: {{ thermostat }} {{" \n "}}
+                      mode: {{ mode }} {{" \n "}}
+                      new_target: {{ target_temperature }} {{" \n "}}
+                      current_target: {{ state_attr(thermostat,'temperature') }}
+                    level: !input input_log_level
+                    logger: blueprints.panhans.heatingcontrol
+
+                - if:
+                    - condition: template
+                      value_template: "{{ states(thermostat) | lower != mode | lower  }}"
+                  then:
+                    - action: climate.set_hvac_mode
+                      data:
+                        entity_id: "{{ thermostat }}"
+                        hvac_mode: "{{ mode }}"
+                    - delay: !input input_action_call_delay
+
+                - if:
+                    - condition: template
+                      value_template: "{{ state_attr(thermostat, 'temperature') != target_temperature and mode != 'off' }}"
+                  then:
+                    - action: climate.set_temperature
+                      data:
+                        entity_id: "{{ thermostat }}"
+                        temperature: "{{ target_temperature | float }}"
+                    - delay: !input input_action_call_delay
+          
+          # custom action
+          - if:
+            - condition: template
+              value_template: "{{ input_custom_action != none }}"
+            then: !input "input_custom_action"
+              
 
 mode: queued
