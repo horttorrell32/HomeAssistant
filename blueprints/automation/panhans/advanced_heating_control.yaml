@@ -199,7 +199,7 @@ blueprint:
       collapsed: true
       input:
         
-        input_time_based_temperature_change_valve_target:
+        input_adjustments:
           name: 🎛️ Heating Schedule Adjustments
           description: >
             `optional`
@@ -1251,7 +1251,7 @@ trigger_variables:
   input_force_max_temperature: !input input_force_max_temperature
 
   # adjustments / heating plan
-  input_time_based_temperature_change_valve_target: !input input_time_based_temperature_change_valve_target
+  input_adjustments: !input input_adjustments
 
   # calibration
   input_calibration_timeout: !input input_calibration_timeout
@@ -1290,12 +1290,12 @@ trigger:
     id: temperature_change_reload
 
   # physical change
-  - trigger: state
-    entity_id: !input input_trvs
-    attribute: temperature
-    for:
-      seconds: 5
-    id: temperature_change_valve_target
+  # - trigger: state
+  #   entity_id: !input input_trvs
+  #   attribute: temperature
+  #   for:
+  #     seconds: 5
+  #   id: temperature_change_valve_target
 
   # eco/comfort change
   - trigger: state
@@ -1639,7 +1639,7 @@ trigger:
       {% set current_day = timestamp.strftime('%a') %}
       {% set current_time = timestamp.strftime('%H:%M') %}
 
-      {% set plan = input_time_based_temperature_change_valve_target | rejectattr('time', 'undefined') 
+      {% set plan = input_adjustments | rejectattr('time', 'undefined') 
           | selectattr('time','eq', current_time | string)
           | sort(attribute='time', reverse = true)
           | list  %}
@@ -1812,7 +1812,7 @@ variables:
   presence_ignor_people: !input input_away_presence_ignor_people
 
   # heating adjustments
-  input_time_based_temperature_change_valve_target: !input input_time_based_temperature_change_valve_target
+  input_adjustments: !input input_adjustments
 
   # temperature tweaks
   is_reset_temperature: !input input_reset_temperature
@@ -2178,7 +2178,7 @@ variables:
     {% set current_day = current_ts.strftime('%a') %}
     {% set current_time = current_ts.strftime('%H:%M') %}
 
-    {% set plan = input_time_based_temperature_change_valve_target | rejectattr('time', 'undefined') 
+    {% set plan = input_adjustments | rejectattr('time', 'undefined') 
         | selectattr('time','<=', current_time| string)
         | sort(attribute='time', reverse = true)
         | list  %}
@@ -2206,7 +2206,7 @@ variables:
     {% set current_day = timestamp.strftime('%a') %}
     {% set current_time = timestamp.strftime('%H:%M') %}
 
-    {% set plan = input_time_based_temperature_change_valve_target | rejectattr('time', 'undefined') 
+    {% set plan = input_adjustments | rejectattr('time', 'undefined') 
         | selectattr('time','<=', current_time| string)
         | sort(attribute='time', reverse = true)
         | list  %}
@@ -2295,14 +2295,13 @@ variables:
     {% endif %}
 
   is_scene_create_trigger: >
-    {{ trigger.id is defined and ("window_on" in trigger.id or "party_on" in trigger.id) }}
+    {{ trigger.id is defined and ("window_on" in trigger.id and not state_party) or ("party_on" in trigger.id and not state_window) }}
 
   is_scene_apply_trigger: >
-    {{ trigger.id is defined and ("window_off" in trigger.id or "party_off" in trigger.id) and not is_legacy_restore }}
+    {{ trigger.id is defined and ("window_off" in trigger.id or "party_off" in trigger.id) and not is_legacy_restore and not (state_window or state_party) }}
 
   is_scene_destroy_trigger: >
-    {{ (is_change_trigger or trigger.id == 'temperature_change_heating_adjustment') and
-        (state_window or state_party) }}
+    {{ (is_change_trigger or trigger.id == 'temperature_change_heating_adjustment') and not (state_window or state_party) }}
 
   # scene management
   scene_entities: "{{ valves }}"
@@ -2315,6 +2314,8 @@ variables:
       {{ scene_window_id }}
     {% elif is_scene_apply_trigger and "party_off" in trigger.id %}
       {{ scene_party_id }}
+    {% else %}
+      {{ none }}
     {% endif %}
 
   scenes_to_destroy: >
@@ -2324,6 +2325,9 @@ variables:
       {% set scenes = iif(state_party, scenes + [scene_party_id], scenes) %}
     {% endif %}
     {{ scenes }}
+
+  scene_to_create: >
+    {{ iif(is_scene_create_trigger and "window_on" in trigger.id, scene_window_id, scene_party_id) }}
   
   # reset temperature
   reset_entity: >
@@ -2566,6 +2570,8 @@ variables:
         {% set min_temp = state_attr(valve, 'min_temp') | float(5) %}
         {% set max_temp = state_attr(valve, 'max_temp') | float(30) %}
 
+        {% set valve_temp = target_temperature %}
+
         {% set dont_turn_off = 
               valve in valves_without_off_mode or 
               is_not_off_but_min or 
@@ -2573,10 +2579,7 @@ variables:
               set_max_temperature %}
 
         {% set valve_mode = iif(mode == 'off' and dont_turn_off, current_valve_mode, mode) %}
-
-        {% set valve_temp = iif(set_max_temperature, max_temp, target_temperature) %}
-        {% set valve_temp = iif(is_not_off_but_min and mode == 'off', min_temp, target_temperature) %}
-
+        
         {% set ref_temp = current_valve_temp %}
         {% if is_temperature_sensor_defined %}
           {% set ref_temp = value_temperature_sensor %}
@@ -2584,10 +2587,6 @@ variables:
 
         {% if is_heat_only_if_below_real_temp and target_temperature > ref_temp %}
           {% set mode = 'off' %}
-        {% endif %}
-
-        {% if mode == 'off' and dont_turn_off and (valve in valves_without_off_mode or is_not_off_but_min) %}
-          {% set valve_temp = min_temp %}
         {% endif %}
 
         {% if mode != 'off' %}
@@ -2630,6 +2629,12 @@ variables:
 
         {% endif %}
 
+        {% if mode == 'off' and dont_turn_off and (valve in valves_without_off_mode or is_not_off_but_min) %}
+          {% set valve_temp = min_temp %}
+        {% endif %}
+
+        {% set valve_temp = iif(set_max_temperature, max_temp, valve_temp) %}
+
         {% set valve_temp = iif(valve_temp > max_temp, max_temp, valve_temp) %}
         {% set valve_temp = iif(valve_temp < min_temp, min_temp, valve_temp) %}
 
@@ -2655,6 +2660,8 @@ variables:
     {% elif is_generic_calibration and is_physical_change_enabled %}
       {% set messages = messages + ['Generic Calibration in combination with physical change / sync feature is not recommended. Expect unwanted side effects.'] %}
     {% endif %}
+
+    {% set messages = messages + ['scene_to_apply: ' + scene_to_apply | string] %}
 
     {{ messages }}
 
@@ -2787,26 +2794,15 @@ actions:
                   entity_id: "{{ reset_entity }}"
 
           # scenes
-          # scene apply
-          - variables:
-              scene_to_apply_tmp: >
-                {% if scene_to_apply == none or states(scene_to_apply) == 'unknown' %}
-                  {{ scenes_all | reject('eq',scene_to_apply) | first | default(none) }}
-                {% else %}
-                  {{ scene_to_apply }}
-                {% endif %}
+          # scene create
           - if:
               - condition: template
-                value_template: "{{ is_scene_apply_trigger }}"
-              - condition: template
-                value_template: "{{ scene_to_apply_tmp != none and states(scene_to_apply_tmp) != 'unknown' }}"
+                value_template: "{{ is_scene_create_trigger }}"
             then:
-              - action: scene.turn_on
-                target:
-                  entity_id: "{{ scene_to_apply }}"
-              - action: scene.delete
-                target:
-                  entity_id: "{{ scene_to_apply }}"
+              - action: scene.create
+                data:
+                  snapshot_entities: "{{ scene_entities }}"
+                  scene_id: "{{ scene_to_create.split('.')[1] }}"
 
           # scene destroy
           - if:
@@ -2822,56 +2818,79 @@ actions:
                         scene_to_destroy: "{{ scenes_to_destroy[repeat.index-1] }}"
                     - if:
                         - condition: template
-                          value_template: "{{ states[scene_to_destroy] != 'unknown' }}"
+                          value_template: "{{ states[scene_to_destroy] is defined }}"
                       then:
                         - action: scene.delete
                           target:
                             entity_id: "{{ scene_to_destroy }}"
 
-          # changes
-          - repeat:
-              count: "{{ changes | count | int }}"
-              sequence:
-                - variables:
-                    index: "{{ repeat.index-1 }}"
-                    thermostat: "{{ (changes.keys() | list) [index] }}"
-                    mode: "{{ (((changes.values() | list) [index]) | first) ['mode'] }}"
-                    target_temperature: "{{ (((changes.values() | list) [index]) | first) ['temp'] }}"
-                - action: system_log.write
-                  data:
-                    message: >
-                      AHC - Change - automation_name {{" \n "}}
-                      thermostat: {{ thermostat }} {{" \n "}}
-                      mode: {{ mode }} {{" \n "}}
-                      new_target: {{ target_temperature }} {{" \n "}}
-                      current_target: {{ state_attr(thermostat,'temperature') }}
-                    level: !input input_log_level
-                    logger: blueprints.panhans.heatingcontrol
-
-                - if:
-                    - condition: template
-                      value_template: "{{ states(thermostat) | lower != mode | lower  }}"
-                  then:
-                    - action: climate.set_hvac_mode
-                      data:
-                        entity_id: "{{ thermostat }}"
-                        hvac_mode: "{{ mode }}"
-                    - delay: !input input_action_call_delay
-
-                - if:
-                    - condition: template
-                      value_template: "{{ state_attr(thermostat, 'temperature') != target_temperature and mode != 'off' }}"
-                  then:
-                    - action: climate.set_temperature
-                      data:
-                        entity_id: "{{ thermostat }}"
-                        temperature: "{{ target_temperature | float }}"
-                    - delay: !input input_action_call_delay
-          
-          # custom action
+          # scene apply
+          - variables:
+              scene_to_apply_tmp: >
+                {% if scene_to_apply != none and states[scene_to_apply] != none %}
+                  {{ scene_to_apply }}
+                {% else %}
+                  {{ scenes_all | expand | reject('==',none) | map(attribute="entity_id") | list | default(none) }}
+                {% endif %}
           - if:
-            - condition: template
-              value_template: "{{ input_custom_action != none }}"
-            then: !input "input_custom_action"
+              - condition: template
+                value_template: "{{ is_scene_apply_trigger }}"
+              - condition: template
+                value_template: "{{ scene_to_apply_tmp != none and states[scene_to_apply_tmp] != none }}"
+            then:
+              - action: scene.turn_on
+                target:
+                  entity_id: "{{ scene_to_apply_tmp }}"
+              - action: scene.delete
+                target:
+                  entity_id: "{{ scene_to_apply_tmp }}"
+              - condition: template
+                value_template: "{{ false }}"
+            else: 
+              # changes
+              - repeat:
+                  count: "{{ changes | count | int }}"
+                  sequence:
+                    - variables:
+                        index: "{{ repeat.index-1 }}"
+                        thermostat: "{{ (changes.keys() | list) [index] }}"
+                        mode: "{{ (((changes.values() | list) [index]) | first) ['mode'] }}"
+                        target_temperature: "{{ (((changes.values() | list) [index]) | first) ['temp'] }}"
+                    - action: system_log.write
+                      data:
+                        message: >
+                          AHC - Change - automation_name {{" \n "}}
+                          thermostat: {{ thermostat }} {{" \n "}}
+                          mode: {{ mode }} {{" \n "}}
+                          new_target: {{ target_temperature }} {{" \n "}}
+                          current_target: {{ state_attr(thermostat,'temperature') }}
+                        level: !input input_log_level
+                        logger: blueprints.panhans.heatingcontrol
+
+                    - if:
+                        - condition: template
+                          value_template: "{{ states(thermostat) | lower != mode | lower  }}"
+                      then:
+                        - action: climate.set_hvac_mode
+                          data:
+                            entity_id: "{{ thermostat }}"
+                            hvac_mode: "{{ mode }}"
+                        - delay: !input input_action_call_delay
+
+                    - if:
+                        - condition: template
+                          value_template: "{{ state_attr(thermostat, 'temperature') != target_temperature and mode != 'off' }}"
+                      then:
+                        - action: climate.set_temperature
+                          data:
+                            entity_id: "{{ thermostat }}"
+                            temperature: "{{ target_temperature | float }}"
+                        - delay: !input input_action_call_delay
+              
+              # custom action
+              - if:
+                - condition: template
+                  value_template: "{{ input_custom_action != none }}"
+                then: !input "input_custom_action"
               
 mode: queued
