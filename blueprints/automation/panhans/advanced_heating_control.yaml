@@ -167,7 +167,7 @@ blueprint:
 
 
             Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
-          default:
+          default: []
           selector:
             entity:
               filter:
@@ -185,7 +185,7 @@ blueprint:
 
 
             Create your helper [here](https://my.home-assistant.io/redirect/helpers/).
-          default:
+          default: []
           selector:
             entity:
               filter:
@@ -322,6 +322,17 @@ blueprint:
                 - domain:
                     - input_boolean
               multiple: false
+
+        input_party_legacy_restore:
+          name: 🔄 Legacy Restore
+          description: >
+            `party` 
+
+
+            Enable this if the temperatures after airing (closing windows) or party won't restore properly
+          default: false
+          selector:
+            boolean:
 
     temperature_tweak_section:
       name: Temperature Tweaks
@@ -619,7 +630,7 @@ blueprint:
             If you're in range of your distance and towards to your home heating kicks in. If you don't specify any scheduler or presence detector heating also is enabled if you arrived.<br/>
 
             **Note**: If *on way home* is detected this gets handled like presence is on or somebody is home. So this has to match with the states of your schedulers if you use them.
-          default: ""
+          default:
           selector:
             device:
               filter:
@@ -1251,6 +1262,8 @@ trigger_variables:
   #presence
   input_presence_sensor: !input input_presence_sensor
   is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
+  input_presence_reaction_on_time: !input input_presence_reaction_on_time
+  input_presence_reaction_off_time: !input input_presence_reaction_off_time
 
   # proximity
   input_proximity: !input input_proximity
@@ -1285,22 +1298,14 @@ trigger:
     id: temperature_change_valve_target
 
   # eco/comfort change
-  - trigger: template
-    value_template: >
-      {% if input_temperature_eco != none %}
-        {{ now() - states.input_number[input_temperature_eco.split('.')[1]].last_updated >= timedelta(**input_action_call_delay) }}
-      {% else %}
-        {{ false }}
-      {% endif %}
+  - trigger: state
+    entity_id: !input input_temperature_eco
+    for: !input input_action_call_delay
     id: temperature_change_eco
 
-  - trigger: template
-    value_template: >
-      {% if input_temperature_comfort != none %}
-        {{ now() - states.input_number[input_temperature_comfort.split('.')[1]].last_updated >= timedelta(**input_action_call_delay) }}
-      {% else %}
-        {{ false }}
-      {% endif %}
+  - trigger: state
+    entity_id: !input input_temperature_comfort
+    for: !input input_action_call_delay
     id: temperature_change_comfort
 
   # persons
@@ -1396,27 +1401,24 @@ trigger:
   # presence sensor
   - trigger: template
     id: temperature_change_presence_on
-    value_template: >
-      {% set state_presence_sensor = input_presence_sensor != none and is_state(input_presence_sensor, 'on') %}
-      
-      {% if is_scheduler_presence_defined %}
-        {{ state_presence_sensor and is_state(input_scheduler_presence, 'on') }}
-      {% else %}
-        {{ state_presence_sensor }}
-      {% endif %}
+    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'on') }}"
     for: !input input_presence_reaction_on_time
 
   - trigger: template
-    value_template: >
-      {% set state_presence_sensor = input_presence_sensor != none and is_state(input_presence_sensor, 'off') %}
-      
-      {% if is_scheduler_presence_defined %}
-        {{ state_presence_sensor and is_state(input_scheduler_presence, 'on') or is_state(input_scheduler_presence, 'off') }}
-      {% else %}
-        {{ state_presence_sensor }}
-      {% endif %}
     id: temperature_change_presence_off
+    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'off') }}"
     for: !input input_presence_reaction_off_time
+
+  # presence scheduler
+  - trigger: template
+    id: temperature_change_presence_scheduler_on
+    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'on') }}"
+    for: !input input_action_call_delay
+
+  - trigger: template
+    id: temperature_change_presence_scheduler_off
+    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'off') }}"
+    for: !input input_action_call_delay
 
   # proximity
   - trigger: template
@@ -1737,8 +1739,10 @@ variables:
 
   # temperatures
   input_temperature_comfort: !input input_temperature_comfort
+  input_temperature_comfort_entity: "{{ iif(input_temperature_comfort == [], none, input_temperature_comfort) }}"
   input_temperature_comfort_static: !input input_temperature_comfort_static
   input_temperature_eco: !input input_temperature_eco
+  input_temperature_eco_entity: "{{ iif(input_temperature_eco == [], none, input_temperature_eco) }}"
   input_temperature_eco_static: !input input_temperature_eco_static
 
   #frost protection
@@ -1766,7 +1770,9 @@ variables:
   input_windows_reaction_time_open: !input input_windows_reaction_time_open
   input_windows_reaction_time_close: !input input_windows_reaction_time_close
   input_window_open_temperature: !input input_window_open_temperature
-  is_legacy_restore: !input input_window_legacy_restore
+  input_party_legacy_restore: !input input_party_legacy_restore
+  input_window_legacy_restore: !input input_window_legacy_restore
+  is_legacy_restore: "{{ input_party_legacy_restore or input_window_legacy_restore }}"
 
   # wintermode / on/off
   input_mode_winter: !input input_mode_winter
@@ -2022,10 +2028,10 @@ variables:
 
   # party
   active_party_entity: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | map(attribute='entity_id') | first | default(none) }}"
-  state_mode_party: "{{ active_party_entity != none }}"
+  state_party: "{{ active_party_entity != none }}"
   party_temp: >
     {% set pos_party_temp = none %}
-    {% if state_mode_party == true %}
+    {% if state_party == true %}
       {% set name = state_attr(active_party_entity,'friendly_name') %}
       {% set pos_temp = name.split(' ') | last %}
       {% if is_number(pos_temp) %}
@@ -2154,8 +2160,8 @@ variables:
 
   # global
   no_changes: "{{ input_persons | count == 0 and input_mode_guest == none and input_schedulers | count == 0 and input_presence_sensor == none and input_proximity == none }}"
-  last_comfort_entity_change: "{{ [input_temperature_comfort] | expand | map(attribute='last_changed') | list | first | default(none) }}"
-  last_eco_entity_change: "{{ [input_temperature_eco] | expand | map(attribute='last_changed') | list | first | default(none) }}"
+  last_comfort_entity_change: "{{ [input_temperature_comfort_entity] | expand | map(attribute='last_changed') | list | first | default(none) }}"
+  last_eco_entity_change: "{{ [input_temperature_eco_entity] | expand | map(attribute='last_changed') | list | first | default(none) }}"
 
   #####################################################################################
   ################################## ADJUSTMENTS ######################################
@@ -2227,14 +2233,14 @@ variables:
     {% endif %}
 
   entry_comfort_temp: >
-    {% if entry != none and 'comfort' in entry.keys() and (last_comfort_entity_change == none or entry_time > last_comfort_entity_change) %}
+    {% if entry != none and 'comfort' in entry.keys() and (last_comfort_entity_change == none or as_datetime(entry_time) < as_datetime(last_comfort_entity_change)) %}
       {{ entry['comfort'] }}
     {% else %}
       {{ none }}
     {% endif %}
 
   entry_eco_temp: >
-    {% if entry != none and 'eco' in entry.keys() and (last_comfort_entity_change == none or entry_time > last_eco_entity_change) %}
+    {% if entry != none and 'eco' in entry.keys() and (last_eco_entity_change == none or as_datetime(entry_time) < as_datetime(last_eco_entity_change)) %}
       {{ entry['eco'] }}
     {% else %}
       {{ none }}
@@ -2322,15 +2328,15 @@ variables:
   # reset temperature
   reset_entity: >
     {% if is_reset and set_comfort and 'on' in trigger.id %}
-      {{ input_temperature_eco }}
+      {{ input_temperature_eco_entity }}
     {% elif is_reset and not set_comfort and 'off' in trigger.id %}
-      {{ input_temperature_comfort }}
+      {{ input_temperature_comfort_entity }}
     {% endif %}
 
   is_reset_trigger: "{{ is_reset and reset_entity != none }}"
 
   reset_temperature: >
-    {{ iif(is_reset_trigger and reset_entity == input_temperature_eco, 
+    {{ iif(is_reset_trigger and reset_entity == input_temperature_eco_entity, 
         input_temperature_eco_static, input_temperature_comfort_static) }}
 
   #####################################################################################
@@ -2518,13 +2524,27 @@ variables:
       {{ input_hvac_mode }}
     {% endif %}
 
-  temperature_comfort: "{{ [entry_comfort_temp, input_temperature_comfort, input_temperature_comfort_static] | reject('==', none) | first }}"
+  temperature_comfort_of_entity: >
+    {% if(input_temperature_comfort_entity != none) %}
+      {{ states(input_temperature_comfort_entity) | float }}
+    {% else %}
+      {{ none }}
+    {% endif %}
+
+  temperature_eco_of_entity: >
+    {% if(input_temperature_eco_entity != none) %}
+      {{ states(input_temperature_eco_entity) | float }}
+    {% else %}
+      {{ none }}
+    {% endif %}
+
+  temperature_comfort: "{{ [entry_comfort_temp, temperature_comfort_of_entity, input_temperature_comfort_static] | reject('==', none) | first }}"
   temperature_away: "{{ temperature_comfort | float - input_away_offset }}"
-  temperature_eco: "{{ [entry_eco_temp, input_temperature_eco, input_temperature_eco_static] | reject('==', none) | first }}"
+  temperature_eco: "{{ [entry_eco_temp, temperature_eco_of_entity, input_temperature_eco_static] | reject('==', none) | first }}"
   target_temperature: >
     {% if state_window and input_window_open_temperature > 0 %}
       {{ input_window_open_temperature }}
-    {% elif state_mode_party %}
+    {% elif state_party %}
       {{ iif(party_temp != none, party_temp, temperature_comfort) }}
     {% else %}
       {{ iif(set_comfort, iif(is_away, temperature_away, temperature_comfort), temperature_eco) }}
@@ -2657,7 +2677,9 @@ actions:
       state: "{{ state_ahc }}"
       mode: "{{ iif(set_comfort == true, 'comfort', 'eco') }}"
       automation: "{{ this.entity_id }}"
+      is_person_defined: "{{ is_person_defined }}"
       is_anybody_home: "{{ is_anybody_home }}"
+      is_proximity_defined: "{{ is_proximity_defined }}"
       is_anybody_home_or_proximity: "{{ is_anybody_home_or_proximity }}"
       is_guest_mode: "{{ is_guest_mode }}"
       active_scheduler: "{{ active_scheduler }}"
@@ -2852,5 +2874,4 @@ actions:
               value_template: "{{ input_custom_action != none }}"
             then: !input "input_custom_action"
               
-
 mode: queued
