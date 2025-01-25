@@ -1472,13 +1472,13 @@ trigger_variables:
 
   input_person_count: "{{ input_persons | count }}"
   is_person_defined: "{{ input_person_count > 0 }}"
-  is_guest_mode_defined: "{{ input_mode_guest != none }}"
+  is_guest_mode_defined: "{{ input_mode_guest is not none }}"
 
   # scheduler
   input_schedulers: !input input_schedulers
   input_scheduler_selector: !input input_scheduler_selector
   input_scheduler_presence: !input input_scheduler_presence
-  is_scheduler_presence_defined: "{{ input_scheduler_presence != none }}"
+  is_scheduler_presence_defined: "{{ input_scheduler_presence is not none }}"
 
   # temperatures
   input_temperature_comfort: !input input_temperature_comfort
@@ -1509,7 +1509,7 @@ trigger_variables:
 
   #presence
   input_presence_sensor: !input input_presence_sensor
-  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
+  is_presence_sensor_defined: "{{ input_presence_sensor is not none }}"
   input_presence_reaction_on_time: !input input_presence_reaction_on_time
   input_presence_reaction_off_time: !input input_presence_reaction_off_time
 
@@ -1611,7 +1611,7 @@ trigger:
 
       {% if schedules_count == 0 %}
         {% set selected_scheduler = none %}
-      {% elif schedules_count == 1 or input_scheduler_selector == none %}
+      {% elif schedules_count == 1 or input_scheduler_selector is none %}
         {% set selected_scheduler = input_schedulers | first %}
       {% elif schedules_count > 1 %}
         {% set selector_value = states(input_scheduler_selector) %}
@@ -1624,13 +1624,13 @@ trigger:
           {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
         {% else %}
           {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
-          {% if (selected_scheduler == none) %}
+          {% if (selected_scheduler is none) %}
             {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
           {% endif %}
         {% endif %}
       {% endif %}
 
-      {% if selected_scheduler == none %}
+      {% if selected_scheduler is none %}
         {{ false }}
       {% else %}
         {{ is_state(selected_scheduler, 'on') }}
@@ -1644,7 +1644,7 @@ trigger:
 
       {% if schedules_count == 0 %}
         {% set selected_scheduler = none %}
-      {% elif schedules_count == 1 or input_scheduler_selector == none %}
+      {% elif schedules_count == 1 or input_scheduler_selector is none %}
         {% set selected_scheduler = input_schedulers | first %}
       {% elif schedules_count > 1 %}
         {% set selector_value = states(input_scheduler_selector) %}
@@ -1657,13 +1657,13 @@ trigger:
           {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
         {% else %}
           {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
-          {% if (selected_scheduler == none) %}
+          {% if (selected_scheduler is none) %}
             {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
           {% endif %}
         {% endif %}
       {% endif %}
 
-      {% if selected_scheduler == none %}
+      {% if selected_scheduler is none %}
         {{ false }}
       {% else %}
         {{ is_state(selected_scheduler, 'off') }}
@@ -1672,23 +1672,23 @@ trigger:
   # presence sensor
   - trigger: template
     id: temperature_change_presence_on
-    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'on') }}"
+    value_template: "{{ input_presence_sensor is not none and is_state(input_presence_sensor, 'on') }}"
     for: !input input_presence_reaction_on_time
 
   - trigger: template
     id: temperature_change_presence_off
-    value_template: "{{ input_presence_sensor != none and is_state(input_presence_sensor, 'off') }}"
+    value_template: "{{ input_presence_sensor is not none and is_state(input_presence_sensor, 'off') }}"
     for: !input input_presence_reaction_off_time
 
   # presence scheduler
   - trigger: template
     id: temperature_change_presence_scheduler_on
-    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'on') }}"
+    value_template: "{{ input_scheduler_presence is not none and is_state(input_scheduler_presence, 'on') }}"
     for: !input input_action_call_delay
 
   - trigger: template
     id: temperature_change_presence_scheduler_off
-    value_template: "{{ input_scheduler_presence != none and is_state(input_scheduler_presence, 'off') }}"
+    value_template: "{{ input_scheduler_presence is not none and is_state(input_scheduler_presence, 'off') }}"
     for: !input input_action_call_delay
 
   # proximity
@@ -1788,7 +1788,7 @@ trigger:
   - trigger: template
     id: temperature_change_winter_mode_on
     value_template: >
-      {% if input_mode_winter != none %}
+      {% if input_mode_winter is not none %}
         {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
         {{ is_state(input_mode_winter, activation_state) }}
       {% endif %}
@@ -1797,7 +1797,7 @@ trigger:
   - trigger: template
     id: temperature_change_winter_mode_off
     value_template: >
-      {% if input_mode_winter != none %}
+      {% if input_mode_winter is not none %}
         {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
         {{ not is_state(input_mode_winter, activation_state) }}
       {% endif %}
@@ -1807,7 +1807,7 @@ trigger:
   - trigger: template
     id: temperature_change_outside_on
     value_template: >
-      {% if input_mode_outside_temperature == none %}
+      {% if input_mode_outside_temperature is none %}
         {{ false }}
       {% else %}
         {% set outside_state = false %}
@@ -1836,7 +1836,7 @@ trigger:
   - trigger: template
     id: temperature_change_outside_off
     value_template: >
-      {% if input_mode_outside_temperature == none %}
+      {% if input_mode_outside_temperature is none %}
         {{ false }}
       {% else %}
         {% set outside_state = false %}
@@ -1951,7 +1951,7 @@ trigger:
         {{ false }}
       {% else %}
         {% set enable_liming = true %}
-        {% if input_mode_winter != none %}
+        {% if input_mode_winter is not none %}
           {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
         {% endif %}
 
@@ -1977,7 +1977,7 @@ trigger:
         {{ false }}
       {% else %}
         {% set enable_liming = true %}
-        {% if input_mode_winter != none %}
+        {% if input_mode_winter is not none %}
           {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
         {% endif %}
 
@@ -2175,7 +2175,7 @@ variables:
 
   # uptime
   up_time_sensor: "{{ integration_entities('uptime') | first | default(none) }}"
-  is_uptime_defined: "{{ up_time_sensor != none }}"
+  is_uptime_defined: "{{ up_time_sensor is not none }}"
   uptime: >
     {% if is_uptime_defined %}
       {{ states(up_time_sensor) | as_datetime }}
@@ -2198,7 +2198,7 @@ variables:
 
   # on/off
   state_outside_temp: >
-    {% if input_mode_outside_temperature == none %}
+    {% if input_mode_outside_temperature is none %}
       {{ none }}
     {% else %}
       {% set outside_state = false %}
@@ -2225,15 +2225,15 @@ variables:
 
   state_ahc: >
     {% set result = true %}
-    {% if input_mode_winter != none %}
+    {% if input_mode_winter is not none %}
       {% set activation_state = iif(input_invert_winter_mode_value, 'off', 'on') %}
       {% set result = is_state(input_mode_winter, activation_state) %}
     {% endif %}
 
-    {{ iif(state_outside_temp == none, result, result and state_outside_temp) }}
+    {{ iif(state_outside_temp is none, result, result and state_outside_temp) }}
 
   # proximity
-  is_proximity_defined: "{{ input_proximity != none }}"
+  is_proximity_defined: "{{ input_proximity is not none }}"
 
   state_proximity_arrived: >
     {% set proximity_entities = device_entities(input_proximity) %}
@@ -2285,8 +2285,8 @@ variables:
     {{ towards_and_in_distance }}
 
   # persons
-  is_person_defined: "{{ input_persons | count > 0 or input_mode_guest != none }}"
-  is_guest_mode: "{{ input_mode_guest != none and is_state(input_mode_guest, 'on') }}"
+  is_person_defined: "{{ input_persons | count > 0 or input_mode_guest is not none }}"
+  is_guest_mode: "{{ input_mode_guest is not none and is_state(input_mode_guest, 'on') }}"
   is_anybody_home: >
     {% if is_guest_mode %}
       {{ true }}
@@ -2332,7 +2332,7 @@ variables:
 
     {% if schedules_count == 0 %}
       {% set selected_scheduler = none %}
-    {% elif schedules_count == 1 or input_scheduler_selector == none %}
+    {% elif schedules_count == 1 or input_scheduler_selector is none %}
       {% set selected_scheduler = input_schedulers | first %}
     {% elif schedules_count > 1 %}
       {% set selector_value = states(input_scheduler_selector) %}
@@ -2345,7 +2345,7 @@ variables:
         {% set selected_scheduler = iif(selector_value == 'off', input_schedulers[0], input_schedulers[1]) %}
       {% else %}
         {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'eq', selector_value) | map(attribute='entity_id') | first | default(none) %}
-        {% if (selected_scheduler == none) %}
+        {% if (selected_scheduler is none) %}
           {% set selected_scheduler = input_schedulers | expand | selectattr('attributes.friendly_name', 'search', '(?i)' + selector_value) | map(attribute='entity_id') | first | default(none) %}
         {% endif %}
       {% endif %}
@@ -2353,13 +2353,13 @@ variables:
 
     {{ selected_scheduler }}
 
-  is_scheduler_defined: "{{ active_scheduler != none }}"
+  is_scheduler_defined: "{{ active_scheduler is not none }}"
 
-  state_scheduler: "{{ active_scheduler != none and is_state(active_scheduler,'on') }}"
+  state_scheduler: "{{ active_scheduler is not none and is_state(active_scheduler,'on') }}"
 
   # presence
-  is_presence_sensor_defined: "{{ input_presence_sensor != none }}"
-  is_presence_scheduler_defined: "{{ input_scheduler_presence != none }}"
+  is_presence_sensor_defined: "{{ input_presence_sensor is not none }}"
+  is_presence_scheduler_defined: "{{ input_scheduler_presence is not none }}"
   state_presence_scheduler: "{{ is_presence_scheduler_defined and is_state(input_scheduler_presence, 'on') }}"
 
   state_presence_sensor: >
@@ -2390,7 +2390,7 @@ variables:
 
   # party
   active_party_entity: "{{ input_mode_party | expand | selectattr('state', 'in', ['active','on']) | map(attribute='entity_id') | first | default(none) }}"
-  state_party: "{{ active_party_entity != none }}"
+  state_party: "{{ active_party_entity is not none }}"
   party_temp: >
     {% set pos_party_temp = none %}
     {% if state_party == true %}
@@ -2484,7 +2484,7 @@ variables:
       {{ false }}
     {% else %}
       {% set enable_liming = true %}
-      {% if input_mode_winter != none %}
+      {% if input_mode_winter is not none %}
         {% set enable_liming = is_state(input_mode_winter,'on') or input_liming_in_winter %}
       {% endif %}
 
@@ -2547,7 +2547,7 @@ variables:
 
   latest_entry_today: >
     {% set scheduler_name = none %}
-    {% if active_scheduler != none %}
+    {% if active_scheduler is not none %}
       {% set scheduler_name = state_attr(active_scheduler,'friendly_name') %}
     {% endif %}
 
@@ -2588,7 +2588,7 @@ variables:
     {% set timestamp = as_datetime(current_time_stamp).replace(hour=23,minute=59) + timedelta(days=-1) %}
 
     {% set scheduler_name = none %}
-    {% if active_scheduler != none %}
+    {% if active_scheduler is not none %}
       {% set scheduler_name = state_attr(active_scheduler,'friendly_name') %}
     {% endif %}
 
@@ -2623,21 +2623,21 @@ variables:
       {{ none }}
     {% endif %}
 
-  entry: "{{ iif(latest_entry_today != none, latest_entry_today, latest_entry_day_before) }}"
+  entry: "{{ iif(latest_entry_today is not none, latest_entry_today, latest_entry_day_before) }}"
 
   entry_time: >
-    {% if entry != none  %}
+    {% if entry is not none  %}
       {% set entry_hour = entry['time'].split(':')[0] | int %}
       {% set entry_minute = entry['time'].split(':')[1] | int %}
-      {{ as_datetime(current_time_stamp).replace(hour=entry_hour, minute=entry_minute, second=0, microsecond=0) + timedelta(days=iif(latest_entry_today == none,-1,0))  }}
+      {{ as_datetime(current_time_stamp).replace(hour=entry_hour, minute=entry_minute, second=0, microsecond=0) + timedelta(days=iif(latest_entry_today is none,-1,0))  }}
     {% endif %}
 
   entry_comfort_temp: >
-    {% if entry != none and 'comfort' in entry.keys() and (last_comfort_entity_change == none or as_datetime(entry_time) > as_datetime(last_comfort_entity_change)) %}
+    {% if entry is not none and 'comfort' in entry.keys() and (last_comfort_entity_change is none or as_datetime(entry_time) > as_datetime(last_comfort_entity_change)) %}
       {% set entry_temp = entry['comfort']%}  
       {% if is_number(entry_temp) %}
         {{ entry_temp }}
-      {% elif states[entry_temp] != none %}
+      {% elif states[entry_temp] is not none %}
         {{ states(entry_temp) }}
       {% endif %}
     {% else %}
@@ -2645,11 +2645,11 @@ variables:
     {% endif %}
 
   entry_eco_temp: >
-    {% if entry != none and 'eco' in entry.keys() and (last_eco_entity_change == none or as_datetime(entry_time) > as_datetime(last_eco_entity_change)) %}
+    {% if entry is not none and 'eco' in entry.keys() and (last_eco_entity_change is none or as_datetime(entry_time) > as_datetime(last_eco_entity_change)) %}
       {% set entry_temp = entry['eco']%}  
       {% if is_number(entry_temp) %}
         {{ entry_temp }}
-      {% elif states[entry_temp] != none %}
+      {% elif states[entry_temp] is not none %}
         {{ states(entry_temp) }}
       {% endif %}
     {% else %}
@@ -2657,14 +2657,14 @@ variables:
     {% endif %}
 
   entry_calibration: >
-    {% if entry != none and 'calibration' in entry.keys() %}
+    {% if entry is not none and 'calibration' in entry.keys() %}
       {{ entry['calibration'] == 'on' }}
     {% else %}
       {{ true }}
     {% endif %}
 
   entry_mode: >
-    {% if entry != none and 'mode' in entry.keys() %}
+    {% if entry is not none and 'mode' in entry.keys() %}
       {{ entry['mode'] }}
     {% else %}
       {{ 'auto' }}
@@ -2715,7 +2715,7 @@ variables:
 
   is_adjustment_trigger:
     "{{ trigger_id_defined and trigger.id == 'temperature_change_heating_adjustment' and
-    (entry_comfort_temp != none or entry_eco_temp != none) }}"
+    (entry_comfort_temp is not none or entry_eco_temp is not none) }}"
 
   is_reset: >
     {{ (is_reset_temperature and is_change_trigger) or 
@@ -2728,7 +2728,7 @@ variables:
       {% elif trigger_id_defined and 'temperature_change_window_off' not in trigger.id %}
         {{ false }}
       {% endif %}
-    {% elif trigger.platform == none %}
+    {% elif trigger.platform is none %}
       {{ true }}
     {% elif trigger_id_defined and trigger.id == 'temperature_change_valve_target' %}
       {{ false }}
@@ -2824,14 +2824,14 @@ variables:
     {% endif %}
 
   temperature_comfort_of_entity: >
-    {% if(input_temperature_comfort_entity != none) %}
+    {% if(input_temperature_comfort_entity is not none) %}
       {{ states(input_temperature_comfort_entity) | float }}
     {% else %}
       {{ none }}
     {% endif %}
 
   temperature_eco_of_entity: >
-    {% if(input_temperature_eco_entity != none) %}
+    {% if(input_temperature_eco_entity is not none) %}
       {{ states(input_temperature_eco_entity) | float }}
     {% else %}
       {{ none }}
@@ -2844,7 +2844,7 @@ variables:
     {% if state_window and input_window_open_temperature > 0 %}
       {{ input_window_open_temperature }}
     {% elif state_party %}
-      {{ iif(party_temp != none, party_temp, temperature_comfort) }}
+      {{ iif(party_temp is not none, party_temp, temperature_comfort) }}
     {% elif is_frost_protection %}
       {{ input_frost_protection_temp }}
     {% else %}
@@ -2960,7 +2960,7 @@ variables:
             | map(attribute='entity_id') 
             | list | first | default(none) %}
 
-        {% if open_valve_entity != none and current_temp != none and target_temp != none and
+        {% if open_valve_entity is not none and current_temp is not none and target_temp is not none and
             (
               (trigger_id_defined and trigger.id == 'positioning_event') or 
               ([open_valve_entity] | expand | map(attribute='last_changed') | first) + timedelta(**input_valve_positioning_timeout) <= now()
@@ -3005,10 +3005,10 @@ variables:
   reset_data: >
     {% set result = [] %}
     {% if is_adjustment_trigger %}
-      {% if entry_comfort_temp != none and input_temperature_comfort_entity != none %}
+      {% if entry_comfort_temp is not none and input_temperature_comfort_entity is not none %}
         {% set result = result + [{'entity': input_temperature_comfort_entity, 'temp': entry_comfort_temp}] %}
       {% endif %}
-      {% if entry_eco_temp != none and input_temperature_eco_entity != none %}
+      {% if entry_eco_temp is not none and input_temperature_eco_entity is not none %}
         {% set result = result + [{'entity': input_temperature_eco_entity, 'temp': entry_eco_temp}] %}
       {% endif %}
     {% else %}
@@ -3027,7 +3027,7 @@ variables:
           input_temperature_eco_static, input_temperature_comfort_static) %}
       {% endif %}
 
-      {% if entity != none and temp_r != none %}
+      {% if entity is not none and temp_r is not none %}
         {% set result = result + [{'entity': entity, 'temp': temp_r}] %}
       {% endif %}
     {% endif %}
@@ -3273,10 +3273,10 @@ variables:
   no_changes: >
     {{ 
       (input_persons | count == 0 and 
-      input_mode_guest == none and 
+      input_mode_guest is none and 
       input_schedulers | count == 0 and 
-      input_presence_sensor == none and 
-      input_proximity == none) or
+      input_presence_sensor is none and 
+      input_proximity is none) or
       (is_temperature_sensor_defined and not valid_temperature_sensor)
     }}
 
@@ -3441,7 +3441,7 @@ actions:
                     - condition: template
                       value_template: "{{ thermostat in valves_xiaomi }}"
                     - condition: template
-                      value_template: "{{ select_entity != none and not is_state(select_entity, 'external') }}"
+                      value_template: "{{ select_entity is not none and not is_state(select_entity, 'external') }}"
                   then:
                     - action: select.select_option
                       target:
@@ -3507,7 +3507,7 @@ actions:
           - condition: template
             value_template: "{{ is_scene_create_trigger }}"
           - condition: template
-            value_template: "{{ states[scene_to_create] == none }}"
+            value_template: "{{ states[scene_to_create] is none }}"
         then:
           - action: scene.create
             data:
@@ -3528,7 +3528,7 @@ actions:
                     scene_to_destroy: "{{ scenes_to_destroy[repeat.index-1] }}"
                 - if:
                     - condition: template
-                      value_template: "{{ states[scene_to_destroy] != none }}"
+                      value_template: "{{ states[scene_to_destroy] is not none }}"
                   then:
                     - action: scene.delete
                       target:
@@ -3537,7 +3537,7 @@ actions:
       # scene apply
       - variables:
           scene_to_apply_tmp: >
-            {% if scene_to_apply != none and states[scene_to_apply] != none %}
+            {% if scene_to_apply is not none and states[scene_to_apply] is not none %}
               {{ scene_to_apply }}
             {% else %}
               {{ scenes_all | expand | reject('==',none) | map(attribute="entity_id") | list | first | default(none) }}
@@ -3546,7 +3546,7 @@ actions:
           - condition: template
             value_template: "{{ is_scene_apply_trigger }}"
           - condition: template
-            value_template: "{{ scene_to_apply_tmp != none and states[scene_to_apply_tmp] != none }}"
+            value_template: "{{ scene_to_apply_tmp is not none and states[scene_to_apply_tmp] is not none }}"
         then:
           - action: system_log.write
             data:
@@ -3660,7 +3660,7 @@ actions:
       # custom action
       - if:
           - condition: template
-            value_template: "{{ input_custom_action != none }}"
+            value_template: "{{ input_custom_action is not none }}"
         then: !input "input_custom_action"
 
 mode: queued
